@@ -84,9 +84,15 @@ router.patch("/:level/:id", canEdit, async (req, res) => {
 router.delete("/:level/:id", canEdit, async (req, res) => {
   const level = LEVELS[req.params.level];
   if (!level) return res.status(404).json({ error: "Unknown level" });
-  const { rowCount } = await pool.query(`DELETE FROM ${level.table} WHERE id = $1`, [req.params.id]);
-  if (!rowCount) return res.status(404).json({ error: "Not found" });
-  res.json({ deleted: true });
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM ${level.table} WHERE id = $1`, [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "Not found" });
+    res.json({ deleted: true });
+  } catch (err) {
+    if (err.code === "23503")
+      return res.status(409).json({ error: "Can't delete: it still contains questions. Delete or move them first." });
+    throw err;
+  }
 });
 
 module.exports = router;
