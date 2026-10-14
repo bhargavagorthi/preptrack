@@ -3,6 +3,7 @@ import api from "../../api";
 import SyllabusPicker from "../components/SyllabusPicker";
 import QuestionEditor from "../components/QuestionEditor";
 import { TYPE_LABEL } from "../constants";
+import ImportQuestions from "../components/ImportQuestions";
 
 const EMPTY_FILTERS = {
   subject_id: "", chapter_id: "", topic_id: "", type: "", difficulty: "", search: "",
@@ -14,6 +15,7 @@ export default function QuestionBank() {
   const [questions, setQuestions] = useState([]);
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState(null); // null = list, {} = new, question = edit
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -45,6 +47,14 @@ export default function QuestionBank() {
     }
   }
 
+    if (importing) {
+    return (
+      <ImportQuestions
+        onCancel={() => setImporting(false)}
+        onDone={() => { setImporting(false); load(); }}
+      />
+    );
+  }
   if (editing) {
     return (
       <QuestionEditor
@@ -63,7 +73,10 @@ export default function QuestionBank() {
           <h1>Question Bank</h1>
           <p className="muted">{total} question{total === 1 ? "" : "s"}</p>
         </div>
-        <button onClick={() => setEditing({})}>+ New question</button>
+                <div className="head-actions">
+          <button className="ghost" onClick={() => setImporting(true)}>⬆ Import from Excel</button>
+          <button onClick={() => setEditing({})}>+ New question</button>
+        </div>
       </div>
 
       {error && <p className="error">{error}</p>}
