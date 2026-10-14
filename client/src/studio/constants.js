@@ -10,3 +10,12 @@ export const DEFAULT_MARKS = {
   multiple: [4, -2],
   numerical: [4, 0],
 };
+
+export const EXAM_LABEL = {
+  practice: "Practice",
+  jee_main: "JEE Main",
+  jee_advanced: "JEE Advanced",
+};
+
+// Suggested durations when a creator picks an exam type (editable)
+export const EXAM_DURATION = { practice: 60, jee_main: 180, jee_advanced: 180 };

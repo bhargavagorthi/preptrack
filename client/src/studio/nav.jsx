@@ -3,6 +3,7 @@ import ComingSoon from "./pages/ComingSoon";
 import Approvals from "./pages/Approvals";
 import Syllabus from "./pages/Syllabus";
 import QuestionBank from "./pages/QuestionBank";
+import Tests from "./pages/Tests";
 
 const soon = (title, text) => <ComingSoon title={title} text={text} />;
 const home = { path: "", label: "Dashboard", icon: "🏠", element: <Dashboard /> };
@@ -18,8 +19,8 @@ export const NAV = {
   creator: [
     home,
     { path: "syllabus", label: "Syllabus", icon: "📚", element: <Syllabus /> },
-        { path: "questions", label: "Question Bank", icon: "❓", element: <QuestionBank /> },
-    { path: "compilations", label: "Tests & Compilations", icon: "🧩", element: soon("Tests & Compilations", "Build tests from your questions.") },
+    { path: "questions", label: "Question Bank", icon: "❓", element: <QuestionBank /> },
+    { path: "tests", label: "Tests", icon: "🧩", element: <Tests /> },
     { path: "notes", label: "Notes", icon: "🗒️", element: soon("Notes", "Study notes for each topic.") },
   ],
   teacher: [
@@ -38,6 +39,7 @@ export const NAV = {
     home,
     { path: "syllabus", label: "Syllabus", icon: "📚", element: <Syllabus /> },
     { path: "questions", label: "Question Bank", icon: "❓", element: <QuestionBank /> },
+    { path: "tests", label: "Tests", icon: "🧩", element: <Tests /> },
     { path: "approvals", label: "Approvals", icon: "✅", element: <Approvals /> },
     { path: "users", label: "Users", icon: "👤", element: soon("Users", "Manage all accounts.") },
   ],

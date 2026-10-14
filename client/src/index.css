@@ -241,3 +241,35 @@ button.icon:hover { background: #e7e8f0; }
 .table .nowrap { white-space: nowrap; }
 .table .clip { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table .problems { color: var(--error); font-size: 13px; min-width: 220px; }
+
+/* ---------- Tests and builder ---------- */
+.status { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; text-transform: capitalize; vertical-align: middle; }
+.status-draft { background: #f1f2f7; color: #4a4f63; }
+.status-published { background: #e7f7ee; color: #1f7a45; }
+.success { background: #e7f7ee; color: #1f7a45; padding: 10px 12px; border-radius: 8px; margin: 0; font-size: 14px; }
+.link-btn { background: none; color: var(--accent); padding: 0; margin-bottom: 6px; font-size: 14px; }
+.link-btn:hover { background: none; text-decoration: underline; }
+button.small { padding: 6px 12px; font-size: 13px; }
+
+.builder-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.col-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.col-head h3 { margin: 0; }
+.summary-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pill { background: #eef0ff; color: var(--accent-dark); }
+.pill.soft { background: #f1f2f7; color: #4a4f63; font-weight: 600; }
+
+.sel-list, .pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 560px; overflow-y: auto; }
+.sel-list li, .pick-list li {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px;
+}
+.sel-num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: #f1f2f7; display: grid; place-content: center; font-size: 12px; font-weight: 700; }
+.sel-body { flex: 1; display: grid; gap: 6px; min-width: 0; }
+.sel-text { font-size: 14px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sel-actions { display: flex; gap: 2px; }
+.sel-actions button:disabled { opacity: 0.3; }
+.filters.compact { padding: 0 0 12px; }
+.filters.compact select, .filters.compact input { flex: 1; min-width: 120px; }
+
+@media (max-width: 1000px) {
+  .builder-cols { grid-template-columns: 1fr; }
+}

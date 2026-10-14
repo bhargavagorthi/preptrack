@@ -119,6 +119,15 @@ router.post("/", async (req, res) => {
 
 // PATCH /api/questions/:id — creators can edit their own; admins can edit any
 router.patch("/:id", async (req, res) => {
+    const used = await pool.query(
+    `SELECT 1 FROM test_questions tq JOIN tests t ON t.id = tq.test_id
+     WHERE tq.question_id = $1 AND t.status = 'published' LIMIT 1`,
+    [req.params.id]
+  );
+  if (used.rowCount)
+    return res.status(409).json({
+      error: "This question is in a published test. Unpublish that test first, or create a new question.",
+    });
   const { error, value: q } = validate(req.body);
   if (error) return res.status(400).json({ error });
   try {
@@ -139,14 +148,20 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/questions/:id — same ownership rule
+// DELETE /api/questions/:id — same ownership rule; blocked if a test uses it
 router.delete("/:id", async (req, res) => {
-  const { rowCount } = await pool.query(
-    "DELETE FROM questions WHERE id=$1 AND (created_by=$2 OR $3::boolean)",
-    [req.params.id, req.user.id, req.user.role === "admin"]
-  );
-  if (!rowCount) return res.status(404).json({ error: "Question not found, or it isn't yours to delete" });
-  res.json({ deleted: true });
+  try {
+    const { rowCount } = await pool.query(
+      "DELETE FROM questions WHERE id=$1 AND (created_by=$2 OR $3::boolean)",
+      [req.params.id, req.user.id, req.user.role === "admin"]
+    );
+    if (!rowCount) return res.status(404).json({ error: "Question not found, or it isn't yours to delete" });
+    res.json({ deleted: true });
+  } catch (err) {
+    if (err.code === "23503")
+      return res.status(409).json({ error: "This question is used in a test. Remove it from the test first." });
+    throw err;
+  }
 });
 
 module.exports = router;

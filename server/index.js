@@ -11,6 +11,7 @@ app.use("/api/admin", require("./routes/admin"));
 app.use("/api/syllabus", require("./routes/syllabus"));
 app.use("/api/questions/import", require("./routes/questionImport"));
 app.use("/api/questions", require("./routes/questions"));
+app.use("/api/tests", require("./routes/tests"));
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", app: "PrepTrack" });
 });
