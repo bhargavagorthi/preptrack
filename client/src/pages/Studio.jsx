@@ -1,12 +1,24 @@
+import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import StudioLayout from "../studio/StudioLayout";
+import { NAV } from "../studio/nav";
 
 export default function Studio() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const items = NAV[user.role] || [];
+
   return (
-    <div className="center">
-      <h1>Welcome, {user.name}</h1>
-      <p className="muted">You're in the <strong>{user.role}</strong> studio.</p>
-      <button onClick={logout}>Log out</button>
-    </div>
+    <StudioLayout items={items}>
+      <Routes>
+        {items.map((i) =>
+          i.path ? (
+            <Route key={i.path} path={i.path} element={i.element} />
+          ) : (
+            <Route key="home" index element={i.element} />
+          )
+        )}
+        <Route path="*" element={<Navigate to="/studio" replace />} />
+      </Routes>
+    </StudioLayout>
   );
 }

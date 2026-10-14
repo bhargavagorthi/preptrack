@@ -1,0 +1,40 @@
+import Dashboard from "./pages/Dashboard";
+import ComingSoon from "./pages/ComingSoon";
+import Approvals from "./pages/Approvals";
+
+const soon = (title, text) => <ComingSoon title={title} text={text} />;
+const home = { path: "", label: "Dashboard", icon: "🏠", element: <Dashboard /> };
+
+export const NAV = {
+  student: [
+    home,
+    { path: "journey", label: "Syllabus Journey", icon: "🧭", element: soon("Syllabus Journey", "Your chapter-by-chapter path through JEE.") },
+    { path: "tests", label: "Tests", icon: "📝", element: soon("Tests", "Practice tests and full mock exams.") },
+    { path: "analytics", label: "Analytics", icon: "📈", element: soon("Analytics", "Accuracy, speed and topic strength.") },
+    { path: "leaderboard", label: "Leaderboard", icon: "🏆", element: soon("Leaderboard", "Weekly contest rankings.") },
+  ],
+  creator: [
+    home,
+    { path: "syllabus", label: "Syllabus", icon: "📚", element: soon("Syllabus", "Subjects, chapters and topics.") },
+    { path: "questions", label: "Question Bank", icon: "❓", element: soon("Question Bank", "Create and organise questions.") },
+    { path: "compilations", label: "Tests & Compilations", icon: "🧩", element: soon("Tests & Compilations", "Build tests from your questions.") },
+    { path: "notes", label: "Notes", icon: "🗒️", element: soon("Notes", "Study notes for each topic.") },
+  ],
+  teacher: [
+    home,
+    { path: "students", label: "My Students", icon: "👥", element: soon("My Students", "Track your students' progress.") },
+    { path: "assignments", label: "Assignments", icon: "📝", element: soon("Assignments", "Assign tests to your students.") },
+    { path: "reports", label: "Reports", icon: "📊", element: soon("Reports", "Class performance reports.") },
+  ],
+  organiser: [
+    home,
+    { path: "series", label: "Test Series", icon: "🗓️", element: soon("Test Series", "Create and schedule test series.") },
+    { path: "participants", label: "Participants", icon: "👥", element: soon("Participants", "Manage who takes your tests.") },
+    { path: "results", label: "Results", icon: "🏅", element: soon("Results", "Scores and rankings for your series.") },
+  ],
+  admin: [
+    home,
+    { path: "approvals", label: "Approvals", icon: "✅", element: <Approvals /> },
+    { path: "users", label: "Users", icon: "👤", element: soon("Users", "Manage all accounts.") },
+  ],
+};
