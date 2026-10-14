@@ -130,3 +130,37 @@ button.ghost:hover { background: #f1f2f7; color: var(--text); }
   .search, .brand-sm { display: none; }
   .studio-main { padding: 20px 16px; }
 }
+
+/* ---------- Syllabus columns ---------- */
+.columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.col {
+  background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  display: flex; flex-direction: column; min-height: 420px;
+}
+.col h3 {
+  margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 15px;
+  display: flex; align-items: center; gap: 8px;
+}
+.count { background: #f1f2f7; color: var(--muted); font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+.col-empty { padding: 16px; }
+.col-list { list-style: none; margin: 0; padding: 8px; flex: 1; overflow-y: auto; max-height: 460px; }
+.col-list li {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.col-list li:hover { background: #f6f7fb; }
+.col-list li.selected { background: #eef0ff; color: var(--accent-dark); font-weight: 600; }
+.col-list .empty-row { color: var(--muted); cursor: default; }
+.col-list .empty-row:hover { background: none; }
+.row-actions { display: none; gap: 2px; }
+.col-list li:hover .row-actions { display: flex; }
+button.icon { background: none; padding: 4px 6px; font-size: 13px; }
+button.icon:hover { background: #e7e8f0; }
+.add-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
+.add-row input { flex: 1; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+.add-row button { padding: 9px 14px; font-size: 14px; }
+
+@media (max-width: 860px) {
+  .columns { grid-template-columns: 1fr; }
+  .col { min-height: auto; }
+}

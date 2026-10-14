@@ -1,6 +1,7 @@
 import Dashboard from "./pages/Dashboard";
 import ComingSoon from "./pages/ComingSoon";
 import Approvals from "./pages/Approvals";
+import Syllabus from "./pages/Syllabus";
 
 const soon = (title, text) => <ComingSoon title={title} text={text} />;
 const home = { path: "", label: "Dashboard", icon: "🏠", element: <Dashboard /> };
@@ -15,7 +16,7 @@ export const NAV = {
   ],
   creator: [
     home,
-    { path: "syllabus", label: "Syllabus", icon: "📚", element: soon("Syllabus", "Subjects, chapters and topics.") },
+    { path: "syllabus", label: "Syllabus", icon: "📚", element: <Syllabus /> },
     { path: "questions", label: "Question Bank", icon: "❓", element: soon("Question Bank", "Create and organise questions.") },
     { path: "compilations", label: "Tests & Compilations", icon: "🧩", element: soon("Tests & Compilations", "Build tests from your questions.") },
     { path: "notes", label: "Notes", icon: "🗒️", element: soon("Notes", "Study notes for each topic.") },
@@ -34,6 +35,7 @@ export const NAV = {
   ],
   admin: [
     home,
+    { path: "syllabus", label: "Syllabus", icon: "📚", element: <Syllabus /> },
     { path: "approvals", label: "Approvals", icon: "✅", element: <Approvals /> },
     { path: "users", label: "Users", icon: "👤", element: soon("Users", "Manage all accounts.") },
   ],

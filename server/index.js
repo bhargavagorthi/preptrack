@@ -8,6 +8,7 @@ app.use(express.json());
 
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
+app.use("/api/syllabus", require("./routes/syllabus"));
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", app: "PrepTrack" });
 });
