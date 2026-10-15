@@ -87,6 +87,13 @@ router.get("/:id", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   const test = await findOwnTest(req, res);
   if (!test) return;
+    const { rows: taken } = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM attempts WHERE test_id = $1", [test.id]
+  );
+  if (taken[0].n)
+    return res.status(409).json({
+      error: "Students have already taken this test, so it can't be unpublished. Create a new test instead.",
+    });
   if (test.status !== "draft") return res.status(409).json({ error: "Unpublish the test before editing it" });
   const { error, value: t } = validateMeta(req.body);
   if (error) return res.status(400).json({ error });

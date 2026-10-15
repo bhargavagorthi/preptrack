@@ -4,6 +4,7 @@ import Approvals from "./pages/Approvals";
 import Syllabus from "./pages/Syllabus";
 import QuestionBank from "./pages/QuestionBank";
 import Tests from "./pages/Tests";
+import StudentTests from "./pages/StudentTests";
 
 const soon = (title, text) => <ComingSoon title={title} text={text} />;
 const home = { path: "", label: "Dashboard", icon: "🏠", element: <Dashboard /> };
@@ -12,7 +13,7 @@ export const NAV = {
   student: [
     home,
     { path: "journey", label: "Syllabus Journey", icon: "🧭", element: soon("Syllabus Journey", "Your chapter-by-chapter path through JEE.") },
-    { path: "tests", label: "Tests", icon: "📝", element: soon("Tests", "Practice tests and full mock exams.") },
+    { path: "tests", label: "Tests", icon: "📝", element: <StudentTests /> },
     { path: "analytics", label: "Analytics", icon: "📈", element: soon("Analytics", "Accuracy, speed and topic strength.") },
     { path: "leaderboard", label: "Leaderboard", icon: "🏆", element: soon("Leaderboard", "Weekly contest rankings.") },
   ],

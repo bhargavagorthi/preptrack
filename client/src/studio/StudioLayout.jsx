@@ -26,7 +26,7 @@ export default function StudioLayout({ items, children }) {
             <NavLink
               key={i.path || "home"}
               to={i.path ? `/studio/${i.path}` : "/studio"}
-              end
+              end={!i.path}
               className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
             >
               <span>{i.icon}</span>

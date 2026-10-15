@@ -12,7 +12,7 @@ export default function Studio() {
       <Routes>
         {items.map((i) =>
           i.path ? (
-            <Route key={i.path} path={i.path} element={i.element} />
+              <Route key={i.path} path={`${i.path}/*`} element={i.element} />
           ) : (
             <Route key="home" index element={i.element} />
           )
