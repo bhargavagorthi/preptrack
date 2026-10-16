@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { TYPE_LABEL } from "../constants";
+import MathText from "../components/MathText";
 import PointsEarned from "./PointsEarned";
 import ContestRank from "./ContestRank";
 
@@ -103,7 +104,8 @@ export default function ResultView({ data }) {
                   <span className="tag">⏱ {formatDuration(q.time_spent_seconds)}</span>
                 </div>
               </div>
-              <p className="q-text">{q.text}</p>
+              <MathText as="p" className="q-text" text={q.text} />
+              {q.image_url && <img className="q-image" src={q.image_url} alt="Question figure" />}
 
               {q.type === "numerical" ? (
                 <div className="num-review">
@@ -117,7 +119,7 @@ export default function ResultView({ data }) {
                     const isMine = mine.includes(opt.id);
                     return (
                       <li key={opt.id} className={`${isKey ? "correct" : ""} ${isMine && !isKey ? "picked-wrong" : ""}`}>
-                        <b>{opt.id}.</b> {opt.text}
+                        <b>{opt.id}.</b> <MathText text={opt.text} />{opt.image && <img className="opt-image" src={opt.image} alt={"Option " + opt.id} />}
                         {isMine && <span className="your-pick">Your answer</span>}
                       </li>
                     );
@@ -128,7 +130,7 @@ export default function ResultView({ data }) {
               {q.solution && (
                 <details className="solution">
                   <summary>Solution</summary>
-                  <p>{q.solution}</p>
+                  <MathText as="p" text={q.solution} />
                 </details>
               )}
             </div>

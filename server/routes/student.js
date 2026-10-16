@@ -195,7 +195,7 @@ router.get("/attempts/:id", async (req, res) => {
   if (a.status === "in_progress") {
     // Exam mode: questions and options only. Never answers or solutions.
     const { rows: questions } = await pool.query(
-      `SELECT q.id, q.type, q.text, q.options, tq.position,
+      `SELECT q.id, q.type, q.text, q.image_url, q.options, tq.position,
               tq.marks_correct::float8 AS marks_correct, tq.marks_wrong::float8 AS marks_wrong,
               s.name AS subject
        FROM test_questions tq
@@ -224,7 +224,7 @@ router.get("/attempts/:id", async (req, res) => {
 
   // Result mode: everything, including correct answers and solutions
   const { rows: questions } = await pool.query(
-    `SELECT q.id, q.type, q.text, q.options, q.answer, q.solution, tq.position,
+    `SELECT q.id, q.type, q.text, q.image_url, q.options, q.answer, q.solution, tq.position,
             tq.marks_correct::float8 AS marks_correct, tq.marks_wrong::float8 AS marks_wrong,
             s.name AS subject, c.name AS chapter, tp.name AS topic,
             aa.response, aa.is_correct, aa.marks_awarded::float8 AS marks_awarded,

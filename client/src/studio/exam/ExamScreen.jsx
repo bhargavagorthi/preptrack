@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api";
 import { TYPE_LABEL } from "../constants";
+import MathText from "../components/MathText";
 
 const hasAnswer = (r) =>
   r != null && (Array.isArray(r) ? r.length > 0 : String(r.value ?? "").trim() !== "");
@@ -194,7 +195,8 @@ export default function ExamScreen({ data, onSubmitted }) {
             </div>
           </div>
 
-          <p className="exam-text">{q.text}</p>
+          <MathText as="p" className="exam-text" text={q.text} />
+          {q.image_url && <img className="q-image" src={q.image_url} alt="Question figure" />}
 
           {q.type === "numerical" ? (
             <input
@@ -217,7 +219,7 @@ export default function ExamScreen({ data, onSubmitted }) {
                     onClick={() => toggleOption(o.id)}
                   >
                     <span className={`opt-mark ${q.type === "single" ? "round" : ""}`}>{picked ? "✓" : o.id}</span>
-                    {o.text}
+                    <span className="opt-content"><MathText text={o.text} />{o.image && <img className="opt-image" src={o.image} alt={"Option " + o.id} />}</span>
                   </button>
                 );
               })}

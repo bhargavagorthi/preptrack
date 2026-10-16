@@ -474,3 +474,28 @@ button.small { padding: 6px 12px; font-size: 13px; }
 .series-steps li { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
 .series-steps li.step-done { background: #f4fbf7; border-color: #cdeedb; }
 .series-steps li.step-done .sel-num { background: #3fb97a; color: #fff; }
+
+/* ---------- Math and images ---------- */
+.math-text { white-space: pre-wrap; }
+.math-text .katex { font-size: 1.08em; }
+.math-text .katex-display { margin: 0.6em 0; overflow-x: auto; overflow-y: hidden; }
+.q-image { display: block; max-width: 100%; max-height: 380px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.opt-content { display: grid; gap: 6px; min-width: 0; }
+.opt-image { display: block; max-width: 100%; max-height: 150px; border-radius: 6px; border: 1px solid var(--border); background: #fff; }
+.q-options li .opt-image { margin-top: 6px; }
+
+.editor-cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.preview-card { display: grid; gap: 12px; position: sticky; top: 76px; }
+.preview-card .exam-option { cursor: default; }
+.hint { font-size: 12px; color: var(--muted); font-weight: 400; }
+.hint code { background: #f1f2f7; padding: 1px 5px; border-radius: 4px; }
+.option-block { display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+.option-image { padding-left: 46px; }
+.img-upload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.img-preview { display: flex; align-items: flex-start; gap: 10px; }
+.img-preview img { max-height: 120px; max-width: 260px; border-radius: 8px; border: 1px solid var(--border); }
+
+@media (max-width: 1100px) {
+  .editor-cols { grid-template-columns: 1fr; }
+  .preview-card { position: static; }
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import api from "../../api";
 import SyllabusPicker from "./SyllabusPicker";
 import { TYPE_LABEL, EXAM_LABEL } from "../constants";
+import MathText from "../components/MathText";
 
 const EMPTY_FILTERS = { subject_id: "", chapter_id: "", topic_id: "", type: "", difficulty: "", search: "" };
 
@@ -216,7 +217,7 @@ export default function TestBuilder({ testId, onBack }) {
                 <li key={q.id}>
                   <span className="sel-num">{i + 1}</span>
                   <div className="sel-body">
-                    <div className="sel-text">{q.text}</div>
+                    <MathText className="sel-text" text={q.text} />
                     <div className="q-tags">
                       <span className="tag">{q.subject} › {q.chapter}</span>
                       <span className="tag">{TYPE_LABEL[q.type]}</span>
@@ -260,7 +261,7 @@ export default function TestBuilder({ testId, onBack }) {
               {results.map((q) => (
                 <li key={q.id}>
                   <div className="sel-body">
-                    <div className="sel-text">{q.text}</div>
+                    <MathText className="sel-text" text={q.text} />
                     <div className="q-tags">
                       <span className="tag">{q.subject} › {q.topic}</span>
                       <span className="tag">{TYPE_LABEL[q.type]}</span>

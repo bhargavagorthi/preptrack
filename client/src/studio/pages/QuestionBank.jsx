@@ -3,6 +3,7 @@ import api from "../../api";
 import SyllabusPicker from "../components/SyllabusPicker";
 import QuestionEditor from "../components/QuestionEditor";
 import { TYPE_LABEL } from "../constants";
+import MathText from "../components/MathText";
 import ImportQuestions from "../components/ImportQuestions";
 
 const EMPTY_FILTERS = {
@@ -115,12 +116,13 @@ export default function QuestionBank() {
                 <span className={`tag diff-${q.difficulty}`}>{q.difficulty}</span>
                 <span className="tag">+{q.marks_correct} / {q.marks_wrong}</span>
               </div>
-              <p className="q-text">{q.text}</p>
+              <MathText as="p" className="q-text" text={q.text} />
+              {q.image_url && <img className="q-image" src={q.image_url} alt="Question figure" />}
               {q.options && (
                 <ol className="q-options">
                   {q.options.map((o) => (
                     <li key={o.id} className={q.answer.includes(o.id) ? "correct" : ""}>
-                      <b>{o.id}.</b> {o.text}
+                      <b>{o.id}.</b> <MathText text={o.text} />{o.image && <img className="opt-image" src={o.image} alt={"Option " + o.id} />}
                     </li>
                   ))}
                 </ol>
