@@ -15,7 +15,7 @@ const CONTENT = {
   },
   organiser: {
     stats: [["Test series", "0"], ["Participants", "0"], ["Upcoming tests", "0"], ["Results", "0"]],
-    next: ["Create your first test series", "Invite participants"],
+    next: ["Create a test series from published tests", "Publish it so students can enrol", "Track results in Students & results"],
   },
   admin: {
     stats: [["Pending approvals", "—"], ["Users", "—"], ["Tests", "—"], ["Organisations", "1"]],

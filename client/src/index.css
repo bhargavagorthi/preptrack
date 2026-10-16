@@ -460,3 +460,17 @@ button.small { padding: 6px 12px; font-size: 13px; }
 @media (max-width: 900px) {
   .journey-top { grid-template-columns: 1fr; }
 }
+
+/* ---------- Test series ---------- */
+.series-card { display: grid; gap: 10px; color: var(--text); align-content: start; transition: box-shadow 0.15s, transform 0.15s; }
+.series-card:hover { text-decoration: none; box-shadow: 0 6px 20px rgba(28, 31, 46, 0.08); transform: translateY(-2px); }
+.series-card h3 { margin: 0; font-size: 18px; }
+.series-desc { margin: 0; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.series-about { margin: 4px 0 0; white-space: pre-wrap; color: #3a3f52; max-width: 760px; }
+.next-title { font-size: 16px !important; line-height: 1.3; }
+.full-input { width: 100%; margin-bottom: 12px; }
+
+.series-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.series-steps li { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.series-steps li.step-done { background: #f4fbf7; border-color: #cdeedb; }
+.series-steps li.step-done .sel-num { background: #3fb97a; color: #fff; }

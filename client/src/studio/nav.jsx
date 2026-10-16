@@ -1,6 +1,8 @@
 import Dashboard from "./pages/Dashboard";
 import Journey from "./pages/Journey";
 import Leaderboard from "./pages/Leaderboard";
+import SeriesManager from "./pages/SeriesManager";
+import StudentSeries from "./pages/StudentSeries";
 import ComingSoon from "./pages/ComingSoon";
 import Approvals from "./pages/Approvals";
 import Syllabus from "./pages/Syllabus";
@@ -17,6 +19,7 @@ export const NAV = {
     home,
     { path: "journey", label: "Syllabus Journey", icon: "🧭", element: <Journey /> },
     { path: "tests", label: "Tests", icon: "📝", element: <StudentTests /> },
+    { path: "series", label: "Test Series", icon: "📚", element: <StudentSeries /> },
     { path: "analytics", label: "Analytics", icon: "📈", element: <Analytics /> },
     { path: "leaderboard", label: "Leaderboard", icon: "🏆", element: <Leaderboard /> },
   ],
@@ -35,7 +38,7 @@ export const NAV = {
   ],
   organiser: [
     home,
-    { path: "series", label: "Test Series", icon: "🗓️", element: soon("Test Series", "Create and schedule test series.") },
+    { path: "series", label: "Test Series", icon: "🗓️", element: <SeriesManager /> },
     { path: "participants", label: "Participants", icon: "👥", element: soon("Participants", "Manage who takes your tests.") },
     { path: "results", label: "Results", icon: "🏅", element: soon("Results", "Scores and rankings for your series.") },
   ],
@@ -45,6 +48,7 @@ export const NAV = {
     { path: "questions", label: "Question Bank", icon: "❓", element: <QuestionBank /> },
     { path: "tests", label: "Tests", icon: "🧩", element: <Tests /> },
     { path: "approvals", label: "Approvals", icon: "✅", element: <Approvals /> },
+    { path: "series", label: "Test Series", icon: "🗓️", element: <SeriesManager /> },
     { path: "users", label: "Users", icon: "👤", element: soon("Users", "Manage all accounts.") },
   ],
 };
