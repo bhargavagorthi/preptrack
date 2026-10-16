@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { TYPE_LABEL } from "../constants";
+import PointsEarned from "./PointsEarned";
 
 function formatDuration(totalSeconds) {
   const s = Math.max(0, Math.round(totalSeconds));
@@ -50,6 +51,7 @@ export default function ResultView({ data }) {
         <div className="stat-card"><span>Skipped</span><strong>{attempt.unattempted_count}</strong></div>
         <div className="stat-card"><span>Accuracy</span><strong>{accuracy}%</strong></div>
         <div className="stat-card"><span>Time used</span><strong>{formatDuration(timeUsed)}</strong></div>
+        <PointsEarned attemptId={attempt.id} />
       </div>
 
       <div className="card">

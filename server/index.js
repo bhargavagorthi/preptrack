@@ -13,6 +13,7 @@ app.use("/api/questions/import", require("./routes/questionImport"));
 app.use("/api/questions", require("./routes/questions"));
 app.use("/api/tests", require("./routes/tests"));
 app.use("/api/student/analytics", require("./routes/analytics"));
+app.use("/api/student/progress", require("./routes/progress"));
 app.use("/api/student", require("./routes/student"));
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", app: "PrepTrack" });

@@ -1,3 +1,4 @@
+const { awardPoints } = require("../lib/points");
 const express = require("express");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
@@ -81,8 +82,9 @@ async function finalize(attemptId, auto) {
       `UPDATE attempts SET status='submitted', submitted_at=LEAST(now(), deadline), auto_submitted=$2,
               score=$3, max_score=$4, correct_count=$5, wrong_count=$6, unattempted_count=$7
        WHERE id=$1`,
-      [attemptId, auto, round2(score), round2(max), correct, wrong, unattempted]
-    );
+       [attemptId, auto, round2(score), round2(max), correct, wrong, unattempted]
+     );
+     await awardPoints(client, attemptId);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
