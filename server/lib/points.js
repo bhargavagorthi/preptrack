@@ -2,10 +2,10 @@
 const TZ = "Asia/Kolkata"; // decides what counts as "a day" for streaks
 
 const RULES = {
-  perCorrect: { easy: 5, medium: 10, hard: 20 },
-  completion: 10,
+  perCorrect: { easy: 5, medium: 10, hard: 20 }, // only the first time a question is answered correctly
+  completion: 10,                                 // real tests only (not practice)
   accuracyMinAttempted: 5,
-  accuracyBonus: [ // checked top to bottom; first match wins
+  accuracyBonus: [                                // real tests only; first match wins
     { min: 90, points: 50 },
     { min: 75, points: 25 },
   ],
@@ -52,7 +52,9 @@ function streakFrom(days) {
 // Returns how many point events were added (0 if already awarded).
 async function awardPoints(client, attemptId) {
   const { rows: [a] } = await client.query(
-    "SELECT id, student_id, submitted_at, correct_count, wrong_count FROM attempts WHERE id = $1 AND status = 'submitted'",
+    `SELECT a.id, a.student_id, a.submitted_at, a.correct_count, a.wrong_count, t.kind
+     FROM attempts a JOIN tests t ON t.id = a.test_id
+     WHERE a.id = $1 AND a.status = 'submitted'`,
     [attemptId]
   );
   if (!a) return 0;
@@ -61,28 +63,45 @@ async function awardPoints(client, attemptId) {
 
   const events = [];
 
-  // Correct answers, weighted by difficulty
+  // Correct answers, weighted by difficulty, counting only questions never answered correctly before
   const { rows: byDiff } = await client.query(
     `SELECT q.difficulty, COUNT(*)::int AS n
      FROM attempt_answers aa JOIN questions q ON q.id = aa.question_id
      WHERE aa.attempt_id = $1 AND aa.is_correct
+       AND NOT EXISTS (
+         SELECT 1 FROM attempt_answers prev
+         JOIN attempts pa ON pa.id = prev.attempt_id
+         WHERE pa.student_id = $2 AND pa.status = 'submitted'
+           AND (pa.submitted_at, pa.id) < ($3::timestamptz, $1::int)
+           AND prev.question_id = aa.question_id AND prev.is_correct
+       )
      GROUP BY q.difficulty`,
-    [attemptId]
+    [a.id, a.student_id, a.submitted_at]
   );
+  const fresh = byDiff.reduce((s, r) => s + r.n, 0);
   const base = byDiff.reduce((sum, r) => sum + r.n * (RULES.perCorrect[r.difficulty] || 0), 0);
-  if (base > 0) events.push(["correct_answers", base, `${a.correct_count} correct answer${a.correct_count === 1 ? "" : "s"}`]);
-
-  events.push(["test_completed", RULES.completion, "Completed a test"]);
-
-  // Accuracy bonus
-  const attempted = a.correct_count + a.wrong_count;
-  if (attempted >= RULES.accuracyMinAttempted) {
-    const acc = (a.correct_count / attempted) * 100;
-    const rule = RULES.accuracyBonus.find((r) => acc >= r.min);
-    if (rule) events.push(["accuracy_bonus", rule.points, `${Math.round(acc)}% accuracy bonus`]);
+  if (base > 0) {
+    const repeats = a.correct_count - fresh;
+    events.push([
+      "correct_answers",
+      base,
+      `${fresh} correct answer${fresh === 1 ? "" : "s"}` +
+        (repeats > 0 ? ` (${repeats} already solved before, not counted)` : ""),
+    ]);
   }
 
-  // Streak bonus: only for the first test submitted that day
+  if (a.kind === "standard") {
+    events.push(["test_completed", RULES.completion, "Completed a test"]);
+
+    const attempted = a.correct_count + a.wrong_count;
+    if (attempted >= RULES.accuracyMinAttempted) {
+      const acc = (a.correct_count / attempted) * 100;
+      const rule = RULES.accuracyBonus.find((r) => acc >= r.min);
+      if (rule) events.push(["accuracy_bonus", rule.points, `${Math.round(acc)}% accuracy bonus`]);
+    }
+  }
+
+  // Streak bonus: only for the first test or practice submitted that day
   const { rows: [sameDay] } = await client.query(
     `SELECT COUNT(*)::int AS n FROM attempts
      WHERE student_id = $1 AND status = 'submitted' AND id <> $2 AND submitted_at <= $3

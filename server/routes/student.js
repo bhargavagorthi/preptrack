@@ -128,7 +128,7 @@ router.get("/tests", async (req, res) => {
      FROM tests t
      LEFT JOIN test_questions tq ON tq.test_id = t.id
      LEFT JOIN attempts a ON a.test_id = t.id AND a.student_id = $1
-     WHERE t.status = 'published'
+     WHERE t.status = 'published' AND t.kind = 'standard'
      GROUP BY t.id, a.id
      ORDER BY t.published_at DESC`,
     [req.user.id]
@@ -139,7 +139,7 @@ router.get("/tests", async (req, res) => {
 // POST /api/student/tests/:id/start: begin (or resume) an attempt
 router.post("/tests/:id/start", async (req, res) => {
   const { rows: [test] } = await pool.query(
-    "SELECT id, duration_minutes FROM tests WHERE id = $1 AND status = 'published'",
+    "SELECT id, duration_minutes FROM tests WHERE id = $1 AND status = 'published' AND kind = 'standard'",
     [req.params.id]
   );
   if (!test) return res.status(404).json({ error: "This test isn't available" });

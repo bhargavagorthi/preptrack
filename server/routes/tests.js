@@ -46,7 +46,7 @@ const SUMMARY = `
 
 // GET /api/tests — every test with question count and total marks
 router.get("/", async (req, res) => {
-  const { rows } = await pool.query(`${SUMMARY} GROUP BY t.id, u.name ORDER BY t.created_at DESC`);
+  const { rows } = await pool.query(`${SUMMARY} WHERE t.kind = 'standard' GROUP BY t.id, u.name ORDER BY t.created_at DESC`);
   res.json({ tests: rows });
 });
 

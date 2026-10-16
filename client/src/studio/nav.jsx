@@ -1,4 +1,5 @@
 import Dashboard from "./pages/Dashboard";
+import Journey from "./pages/Journey";
 import ComingSoon from "./pages/ComingSoon";
 import Approvals from "./pages/Approvals";
 import Syllabus from "./pages/Syllabus";
@@ -13,7 +14,7 @@ const home = { path: "", label: "Dashboard", icon: "🏠", element: <Dashboard /
 export const NAV = {
   student: [
     home,
-    { path: "journey", label: "Syllabus Journey", icon: "🧭", element: soon("Syllabus Journey", "Your chapter-by-chapter path through JEE.") },
+    { path: "journey", label: "Syllabus Journey", icon: "🧭", element: <Journey /> },
     { path: "tests", label: "Tests", icon: "📝", element: <StudentTests /> },
     { path: "analytics", label: "Analytics", icon: "📈", element: <Analytics /> },
     { path: "leaderboard", label: "Leaderboard", icon: "🏆", element: soon("Leaderboard", "Weekly contest rankings.") },

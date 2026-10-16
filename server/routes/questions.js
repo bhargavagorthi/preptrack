@@ -121,7 +121,7 @@ router.post("/", async (req, res) => {
 router.patch("/:id", async (req, res) => {
     const used = await pool.query(
     `SELECT 1 FROM test_questions tq JOIN tests t ON t.id = tq.test_id
-     WHERE tq.question_id = $1 AND t.status = 'published' LIMIT 1`,
+     WHERE tq.question_id = $1 AND t.status = 'published' AND t.kind = 'standard' LIMIT 1`,
     [req.params.id]
   );
   if (used.rowCount)
