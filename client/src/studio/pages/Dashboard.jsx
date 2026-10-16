@@ -1,13 +1,12 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import api from "../../api";
 import { useAuth } from "../../auth/AuthContext";
 
 const CONTENT = {
-  student: {
-    stats: [["Tests taken", "0"], ["Avg. score", "—"], ["Level", "1"], ["Points", "0"]],
-    next: ["Start your syllabus journey", "Take your first practice test", "Join this week's contest"],
-  },
   creator: {
-    stats: [["Chapters", "0"], ["Questions", "0"], ["Tests", "0"], ["Notes", "0"]],
-    next: ["Set up subjects and chapters", "Add your first questions", "Build a test from a question bank"],
+    stats: [["Chapters", "—"], ["Questions", "—"], ["Tests", "—"], ["Notes", "—"]],
+    next: ["Set up subjects and chapters", "Add questions or import them from Excel", "Build and publish a test"],
   },
   teacher: {
     stats: [["Students", "0"], ["Assignments", "0"], ["Avg. class score", "—"], ["Reports", "0"]],
@@ -25,13 +24,38 @@ const CONTENT = {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const c = CONTENT[user.role];
+  const [live, setLive] = useState(null);
+
+  useEffect(() => {
+    if (user.role !== "student") return;
+    api.get("/student/analytics").then((r) => setLive(r.data)).catch(() => {});
+  }, [user.role]);
+
+  let stats, next;
+  if (user.role === "student") {
+    const o = live?.overview;
+    stats = [
+      ["Tests taken", o ? o.tests_taken : "…"],
+      ["Avg. score", o?.avg_score_pct != null ? `${o.avg_score_pct}%` : "—"],
+      ["Accuracy", o?.accuracy != null ? `${o.accuracy}%` : "—"],
+      ["Level", "—"],
+    ];
+    const weak = live?.insights.weak[0];
+    next = [
+      o?.tests_taken ? "Take another test to track your progress" : "Take your first practice test",
+      weak ? `Practise ${weak.name} (${weak.accuracy}% accuracy)` : "Check your Analytics after each test",
+      "Join this week's contest (coming soon)",
+    ];
+  } else {
+    ({ stats, next } = CONTENT[user.role]);
+  }
+
   return (
     <div className="page">
       <h1>Welcome, {user.name.split(" ")[0]}</h1>
       <p className="muted">Here's your {user.role} overview.</p>
       <div className="stat-grid">
-        {c.stats.map(([label, value]) => (
+        {stats.map(([label, value]) => (
           <div className="stat-card" key={label}>
             <span>{label}</span>
             <strong>{value}</strong>
@@ -40,7 +64,10 @@ export default function Dashboard() {
       </div>
       <div className="card">
         <h3>Next steps</h3>
-        <ul>{c.next.map((n) => <li key={n}>{n}</li>)}</ul>
+        <ul>{next.map((n) => <li key={n}>{n}</li>)}</ul>
+        {user.role === "student" && live?.overview.tests_taken > 0 && (
+          <Link to="/studio/analytics">See full analytics →</Link>
+        )}
       </div>
     </div>
   );

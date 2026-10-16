@@ -1,0 +1,11 @@
+{
+  "name": "preptrack",
+  "private": true,
+  "scripts": {
+    "db": "docker start preptrack-db",
+    "dev": "npm run db && concurrently -n server,client -c blue,green \"npm --prefix server run dev\" \"npm --prefix client run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}

@@ -255,3 +255,4 @@ router.post("/attempts/:id/submit", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.finalize = finalize; // reused by analytics

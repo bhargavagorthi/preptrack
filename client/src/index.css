@@ -360,3 +360,44 @@ button.small { padding: 6px 12px; font-size: 13px; }
   .exam-side { position: static; }
   .exam-top { top: 0; }
 }
+
+/* ---------- Analytics ---------- */
+.stat-card strong.good, .good { color: #1f7a45; }
+.stat-card strong.mid { color: #8a5a00; }
+.stat-card strong.low { color: #b42323; }
+.small { font-size: 12px; }
+.cap { text-transform: capitalize; }
+
+.acc { display: flex; align-items: center; gap: 10px; min-width: 160px; }
+.acc span { font-size: 13px; font-weight: 700; width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
+.acc-track { flex: 1; height: 8px; background: #eef0f5; border-radius: 999px; overflow: hidden; }
+.acc-fill { height: 100%; border-radius: 999px; background: #c9cbe0; }
+.acc-fill.good { background: #3fb97a; }
+.acc-fill.mid { background: #f0a73a; }
+.acc-fill.low { background: #e05656; }
+.table .acc-cell { min-width: 200px; }
+
+.insight-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.insight-card { display: grid; gap: 6px; align-content: start; }
+.insight-card h3 { margin: 0; }
+.insight-card ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.insight-card li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #f7f8fc; border-radius: 8px; }
+.insight-value { font-weight: 800; font-variant-numeric: tabular-nums; }
+.insight-empty { padding: 12px 0; }
+
+.subject-list { display: grid; gap: 10px; margin-top: 12px; }
+.subject-block { border: 1px solid var(--border); border-radius: 10px; padding: 0 14px; }
+.subject-block summary {
+  display: grid; grid-template-columns: 140px 1fr auto auto; align-items: center; gap: 16px;
+  padding: 12px 0; cursor: pointer; list-style: none;
+}
+.subject-block summary::-webkit-details-marker { display: none; }
+.subject-block summary::before { content: "▸"; position: absolute; margin-left: -12px; color: var(--muted); }
+.subject-block[open] summary::before { content: "▾"; }
+.subject-block[open] summary { border-bottom: 1px solid var(--border); }
+.subject-block .table { margin: 6px 0 12px; }
+
+@media (max-width: 1000px) {
+  .insight-grid { grid-template-columns: 1fr; }
+  .subject-block summary { grid-template-columns: 1fr; gap: 6px; }
+}
