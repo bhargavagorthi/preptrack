@@ -59,7 +59,7 @@ router.get("/", async (req, res) => {
               MAX(submitted_at) AS last_practised
        FROM answered GROUP BY topic_id
      ), available AS (
-       SELECT topic_id, COUNT(*)::int AS n FROM questions GROUP BY topic_id
+       SELECT q.topic_id, COUNT(*)::int AS n FROM questions q WHERE NOT EXISTS (SELECT 1 FROM test_questions ctq JOIN tests ct ON ct.id = ctq.test_id WHERE ctq.question_id = q.id AND ct.is_contest AND ct.status = 'published' AND ct.ends_at > now()) GROUP BY q.topic_id
      )
      SELECT s.id AS subject_id, s.name AS subject,
             c.id AS chapter_id, c.name AS chapter,
@@ -170,7 +170,7 @@ router.post("/practice", async (req, res) => {
        FROM attempt_answers aa JOIN attempts a ON a.id = aa.attempt_id
        WHERE a.student_id = $2 AND a.status = 'submitted' AND aa.question_id = q.id
      ) h ON true
-     WHERE q.topic_id = $1
+     WHERE q.topic_id = $1 AND NOT EXISTS (SELECT 1 FROM test_questions ctq JOIN tests ct ON ct.id = ctq.test_id WHERE ctq.question_id = q.id AND ct.is_contest AND ct.status = 'published' AND ct.ends_at > now())
      ORDER BY (h.seen > 0), h.ever_correct, random()
      LIMIT $3`,
     [topicId, me, RULES.practiceSize]

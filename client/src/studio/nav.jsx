@@ -1,5 +1,6 @@
 import Dashboard from "./pages/Dashboard";
 import Journey from "./pages/Journey";
+import Leaderboard from "./pages/Leaderboard";
 import ComingSoon from "./pages/ComingSoon";
 import Approvals from "./pages/Approvals";
 import Syllabus from "./pages/Syllabus";
@@ -17,7 +18,7 @@ export const NAV = {
     { path: "journey", label: "Syllabus Journey", icon: "🧭", element: <Journey /> },
     { path: "tests", label: "Tests", icon: "📝", element: <StudentTests /> },
     { path: "analytics", label: "Analytics", icon: "📈", element: <Analytics /> },
-    { path: "leaderboard", label: "Leaderboard", icon: "🏆", element: soon("Leaderboard", "Weekly contest rankings.") },
+    { path: "leaderboard", label: "Leaderboard", icon: "🏆", element: <Leaderboard /> },
   ],
   creator: [
     home,

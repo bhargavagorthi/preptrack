@@ -65,7 +65,7 @@ export default function Dashboard() {
     next = [
       o?.tests_taken ? "Take another test to track your progress" : "Take your first practice test",
       weak ? `Practise ${weak.name} (${weak.accuracy}% accuracy)` : "Check your Analytics after each test",
-      "Join this week's contest (coming soon)",
+      "Check Tests for live and upcoming contests",
     ];
   } else {
     ({ stats, next } = CONTENT[user.role]);

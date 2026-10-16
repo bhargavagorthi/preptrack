@@ -5,6 +5,20 @@ import { TYPE_LABEL, EXAM_LABEL } from "../constants";
 
 const EMPTY_FILTERS = { subject_id: "", chapter_id: "", topic_id: "", type: "", difficulty: "", search: "" };
 
+// <input type="datetime-local"> works in local time; the server stores UTC
+function toLocalInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+const toPayload = (m) => ({
+  ...m,
+  duration_minutes: Number(m.duration_minutes),
+  starts_at: m.is_contest && m.starts_at ? new Date(m.starts_at).toISOString() : null,
+  ends_at: m.is_contest && m.ends_at ? new Date(m.ends_at).toISOString() : null,
+});
+
 export default function TestBuilder({ testId, onBack }) {
   const [test, setTest] = useState(null);
   const [meta, setMeta] = useState(null);
@@ -25,6 +39,9 @@ export default function TestBuilder({ testId, onBack }) {
       exam: data.test.exam,
       duration_minutes: String(data.test.duration_minutes),
       instructions: data.test.instructions || "",
+      is_contest: Boolean(data.test.is_contest),
+      starts_at: toLocalInput(data.test.starts_at),
+      ends_at: toLocalInput(data.test.ends_at),
     });
     setSelected(data.questions);
     setDirty(false);
@@ -87,7 +104,7 @@ export default function TestBuilder({ testId, onBack }) {
   }
 
   async function saveAll() {
-    await api.patch(`/tests/${test.id}`, { ...meta, duration_minutes: Number(meta.duration_minutes) });
+    await api.patch(`/tests/${test.id}`, toPayload(meta));
     await api.put(`/tests/${test.id}/questions`, { question_ids: selected.map((q) => q.id) });
   }
 
@@ -158,6 +175,24 @@ export default function TestBuilder({ testId, onBack }) {
           <textarea rows={2} value={meta.instructions} disabled={locked}
             onChange={(e) => changeMeta({ instructions: e.target.value })} />
         </label>
+        <div className="field full contest-field">
+          <label className="toggle">
+            <input type="checkbox" checked={meta.is_contest} disabled={locked}
+              onChange={(e) => changeMeta({ is_contest: e.target.checked })} />
+            <b>🏆 Run this as a contest</b>
+            <span className="muted">Students can only take it inside the window. Results and rankings open when it closes.</span>
+          </label>
+          {meta.is_contest && (
+            <div className="marks-row">
+              <label className="field"><span className="label">Opens</span>
+                <input type="datetime-local" value={meta.starts_at} disabled={locked}
+                  onChange={(e) => changeMeta({ starts_at: e.target.value })} /></label>
+              <label className="field"><span className="label">Closes</span>
+                <input type="datetime-local" value={meta.ends_at} disabled={locked}
+                  onChange={(e) => changeMeta({ ends_at: e.target.value })} /></label>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="builder-cols">

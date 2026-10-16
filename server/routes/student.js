@@ -1,7 +1,7 @@
-const { awardPoints } = require("../lib/points");
 const express = require("express");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { awardPoints } = require("../lib/points");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("student"));
@@ -40,7 +40,7 @@ function cleanResponse(q, r) {
   return { value: picked.length ? picked : null };
 }
 
-// Score an attempt and lock it. Safe to call twice.
+// Score an attempt, award points, and lock it. Safe to call twice.
 async function finalize(attemptId, auto) {
   const client = await pool.connect();
   try {
@@ -82,9 +82,9 @@ async function finalize(attemptId, auto) {
       `UPDATE attempts SET status='submitted', submitted_at=LEAST(now(), deadline), auto_submitted=$2,
               score=$3, max_score=$4, correct_count=$5, wrong_count=$6, unattempted_count=$7
        WHERE id=$1`,
-       [attemptId, auto, round2(score), round2(max), correct, wrong, unattempted]
-     );
-     await awardPoints(client, attemptId);
+      [attemptId, auto, round2(score), round2(max), correct, wrong, unattempted]
+    );
+    await awardPoints(client, attemptId);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -98,7 +98,8 @@ async function finalize(attemptId, auto) {
 async function ownAttempt(req, res) {
   const { rows: [a] } = await pool.query(
     `SELECT a.*, a.score::float8 AS score, a.max_score::float8 AS max_score,
-            t.title, t.exam, t.instructions, t.duration_minutes
+            t.title, t.exam, t.instructions, t.duration_minutes,
+            t.kind, t.is_contest, t.starts_at, t.ends_at
      FROM attempts a JOIN tests t ON t.id = a.test_id
      WHERE a.id = $1`,
     [req.params.id]
@@ -110,9 +111,11 @@ async function ownAttempt(req, res) {
   return a;
 }
 
-// GET /api/student/tests: published tests and my attempt on each
+// Contest results stay hidden until the contest closes
+const resultsLocked = (a) => a.is_contest && new Date(a.ends_at) > new Date();
+
+// GET /api/student/tests: published tests and contests, with my attempt on each
 router.get("/tests", async (req, res) => {
-  // Score any of my attempts whose time ran out while I was away
   const { rows: expired } = await pool.query(
     "SELECT id FROM attempts WHERE student_id=$1 AND status='in_progress' AND deadline < now()",
     [req.user.id]
@@ -121,10 +124,12 @@ router.get("/tests", async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT t.id, t.title, t.exam, t.duration_minutes, t.instructions,
+            t.is_contest, t.starts_at, t.ends_at,
             COUNT(tq.question_id)::int AS question_count,
             COALESCE(SUM(tq.marks_correct), 0)::float8 AS total_marks,
             a.id AS attempt_id, a.status AS attempt_status, a.deadline,
-            a.score::float8 AS score, a.max_score::float8 AS max_score
+            CASE WHEN t.is_contest AND t.ends_at > now() THEN NULL ELSE a.score::float8 END AS score,
+            a.max_score::float8 AS max_score
      FROM tests t
      LEFT JOIN test_questions tq ON tq.test_id = t.id
      LEFT JOIN attempts a ON a.test_id = t.id AND a.student_id = $1
@@ -139,15 +144,28 @@ router.get("/tests", async (req, res) => {
 // POST /api/student/tests/:id/start: begin (or resume) an attempt
 router.post("/tests/:id/start", async (req, res) => {
   const { rows: [test] } = await pool.query(
-    "SELECT id, duration_minutes FROM tests WHERE id = $1 AND status = 'published' AND kind = 'standard'",
+    `SELECT id, is_contest, now() < starts_at AS not_open, now() >= ends_at AS closed
+     FROM tests WHERE id = $1 AND status = 'published' AND kind = 'standard'`,
     [req.params.id]
   );
   if (!test) return res.status(404).json({ error: "This test isn't available" });
+
+  const { rows: [existing] } = await pool.query(
+    "SELECT id FROM attempts WHERE test_id = $1 AND student_id = $2",
+    [test.id, req.user.id]
+  );
+  if (existing) return res.json({ attempt_id: existing.id });
+
+  if (test.is_contest && test.not_open) return res.status(409).json({ error: "This contest hasn't opened yet" });
+  if (test.is_contest && test.closed) return res.status(409).json({ error: "This contest has closed" });
+
+  // Contest: time is cut short if the student starts late, so everyone finishes by closing time
   await pool.query(
     `INSERT INTO attempts (test_id, student_id, deadline)
-     VALUES ($1, $2, now() + make_interval(mins => $3))
+     SELECT t.id, $2, LEAST(now() + make_interval(mins => t.duration_minutes), t.ends_at)
+     FROM tests t WHERE t.id = $1
      ON CONFLICT (test_id, student_id) DO NOTHING`,
-    [test.id, req.user.id, test.duration_minutes]
+    [test.id, req.user.id]
   );
   const { rows: [a] } = await pool.query(
     "SELECT id FROM attempts WHERE test_id = $1 AND student_id = $2",
@@ -156,7 +174,7 @@ router.post("/tests/:id/start", async (req, res) => {
   res.json({ attempt_id: a.id });
 });
 
-// GET /api/student/attempts/:id: exam data (no answers) or the full result
+// GET /api/student/attempts/:id: exam data (no answers), locked contest result, or the full result
 router.get("/attempts/:id", async (req, res) => {
   let a = await ownAttempt(req, res);
   if (!a) return;
@@ -168,6 +186,7 @@ router.get("/attempts/:id", async (req, res) => {
 
   const meta = {
     id: a.id, test_id: a.test_id, title: a.title, exam: a.exam, instructions: a.instructions,
+    kind: a.kind, is_contest: a.is_contest, ends_at: a.ends_at,
     status: a.status, started_at: a.started_at, deadline: a.deadline, submitted_at: a.submitted_at,
     auto_submitted: a.auto_submitted, score: a.score, max_score: a.max_score,
     correct_count: a.correct_count, wrong_count: a.wrong_count, unattempted_count: a.unattempted_count,
@@ -193,6 +212,14 @@ router.get("/attempts/:id", async (req, res) => {
       [a.id]
     );
     return res.json({ attempt: meta, server_now: new Date().toISOString(), questions, answers });
+  }
+
+  if (resultsLocked(a)) {
+    return res.json({
+      attempt: { ...meta, score: null, max_score: null, correct_count: null, wrong_count: null, unattempted_count: null },
+      locked_until: a.ends_at,
+      questions: [],
+    });
   }
 
   // Result mode: everything, including correct answers and solutions
@@ -257,4 +284,4 @@ router.post("/attempts/:id/submit", async (req, res) => {
 });
 
 module.exports = router;
-module.exports.finalize = finalize; // reused by analytics
+module.exports.finalize = finalize; // reused by analytics and leaderboards

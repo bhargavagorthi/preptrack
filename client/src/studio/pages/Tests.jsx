@@ -102,7 +102,7 @@ export default function Tests() {
                 {tests.map((t) => (
                   <tr key={t.id}>
                     <td><b>{t.title}</b></td>
-                    <td>{EXAM_LABEL[t.exam]}</td>
+                    <td>{EXAM_LABEL[t.exam]}{t.is_contest && <span className="tag contest-tag">🏆 Contest</span>}</td>
                     <td>{t.question_count}</td>
                     <td>{t.total_marks}</td>
                     <td>{t.duration_minutes} min</td>

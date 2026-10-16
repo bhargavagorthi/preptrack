@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { TYPE_LABEL } from "../constants";
 import PointsEarned from "./PointsEarned";
+import ContestRank from "./ContestRank";
 
 function formatDuration(totalSeconds) {
   const s = Math.max(0, Math.round(totalSeconds));
@@ -52,6 +53,7 @@ export default function ResultView({ data }) {
         <div className="stat-card"><span>Accuracy</span><strong>{accuracy}%</strong></div>
         <div className="stat-card"><span>Time used</span><strong>{formatDuration(timeUsed)}</strong></div>
         <PointsEarned attemptId={attempt.id} />
+      {attempt.is_contest && <ContestRank testId={attempt.test_id} />}
       </div>
 
       <div className="card">
