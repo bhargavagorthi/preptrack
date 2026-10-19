@@ -6,3 +6,4 @@ build/
 server/uploads/
 server/.oci/
 *.pem
+server/backups/
