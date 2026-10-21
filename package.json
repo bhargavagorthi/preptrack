@@ -2,7 +2,7 @@
   "name": "preptrack",
   "private": true,
   "scripts": {
-    "db": "docker start preptrack-db",
+    "db": "bash scripts/db.sh",
     "dev": "npm run db && concurrently -n server,client -c blue,green \"npm --prefix server run dev\" \"npm --prefix client run dev\""
   },
   "devDependencies": {
