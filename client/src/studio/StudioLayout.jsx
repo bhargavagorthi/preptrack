@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import Logo from "../components/Logo";
 
 const ROLE_LABEL = {
   student: "Student", creator: "Creator", teacher: "Teacher", organiser: "Organiser", admin: "Admin",
@@ -12,7 +13,7 @@ export default function StudioLayout({ items, children }) {
   return (
     <div className="studio">
       <header className="topbar">
-        <div className="brand-sm">PrepTrack</div>
+        <div className="brand-sm"><Logo to="/studio" size={34} /></div>
         <input className="search" placeholder="Search chapters, tests, questions…" />
         <div className="user-chip">
           <span className="role-badge">{ROLE_LABEL[user.role]}</span>

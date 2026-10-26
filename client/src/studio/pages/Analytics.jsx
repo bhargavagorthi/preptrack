@@ -131,7 +131,7 @@ export default function Analytics() {
             />
             <Legend />
             <ReferenceLine y={0} stroke="#c9cbe0" />
-            <Line type="monotone" dataKey="score_pct" name="Score %" stroke="#5b5bf6" strokeWidth={2.5} dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="score_pct" name="Score %" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4 }} />
             <Line type="monotone" dataKey="accuracy" name="Accuracy %" stroke="#3fb97a" strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>

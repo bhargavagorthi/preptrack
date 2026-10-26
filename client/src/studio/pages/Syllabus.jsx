@@ -107,7 +107,7 @@ function SyllabusImport({ exam, onClose, onDone }) {
 }
 
 // A colour per subject; every card inside a subject carries it
-const SUBJECT_COLORS = ["#5b5bf6", "#1f9d63", "#e07a1f", "#c2417a", "#1d7fb8", "#7c4dcc"];
+const SUBJECT_COLORS = ["#2563eb", "#1f9d63", "#e07a1f", "#c2417a", "#1d7fb8", "#7c4dcc"];
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function SyllabusCard({ node, tree, below, totals, color, first, last, busy, highlight, onOpen, onAction }) {

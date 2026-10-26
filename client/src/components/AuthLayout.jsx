@@ -1,8 +1,10 @@
+import Logo from "./Logo";
+
 export default function AuthLayout({ children }) {
   return (
     <div className="auth-page">
       <section className="auth-hero">
-        <div className="brand">PrepTrack</div>
+        <div className="brand"><Logo light /></div>
         <h1>Your IIT-JEE journey, mapped and measured.</h1>
         <ul className="hero-points">
           <li><span>📈</span> Analytics on every test you take</li>
