@@ -1,21 +1,22 @@
 import { useState } from "react";
 import api from "../../api";
-import SyllabusPicker from "./SyllabusPicker";
+import NodePicker from "../syllabus/NodePicker";
 import MathText from "./MathText";
 import ImageUpload from "./ImageUpload";
-import { TYPE_LABEL, DEFAULT_MARKS } from "../constants";
+import { TYPE_LABEL, DEFAULT_MARKS, SYLLABUS_EXAMS, SYLLABUS_LABEL } from "../constants";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 const blankOptions = () => LETTERS.slice(0, 4).map((id) => ({ id, text: "", image: "" }));
 
-export default function QuestionEditor({ tree, question, onCancel, onSaved }) {
+export default function QuestionEditor({ question, onCancel, onSaved }) {
   const isEdit = Boolean(question.id);
   const isNum = question.type === "numerical";
 
   const [form, setForm] = useState(() => ({
-    subject_id: question.subject_id ? String(question.subject_id) : "",
-    chapter_id: question.chapter_id ? String(question.chapter_id) : "",
-    topic_id: question.topic_id ? String(question.topic_id) : "",
+    tags: {
+      jee_main: question.tags?.jee_main?.node_id || null,
+      jee_advanced: question.tags?.jee_advanced?.node_id || null,
+    },
     type: question.type || "single",
     text: question.text || "",
     image_url: question.image_url || "",
@@ -29,7 +30,9 @@ export default function QuestionEditor({ tree, question, onCancel, onSaved }) {
     solution: question.solution || "",
   }));
   const [error, setError] = useState("");
+  const [locked, setLocked] = useState(false); // question is in a published test: only tags can change
   const [busy, setBusy] = useState(false);
+  const setTag = (exam, nodeId) => setForm((f) => ({ ...f, tags: { ...f.tags, [exam]: nodeId } }));
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
@@ -61,7 +64,7 @@ export default function QuestionEditor({ tree, question, onCancel, onSaved }) {
     setError("");
     setBusy(true);
     const payload = {
-      topic_id: Number(form.topic_id) || null,
+      tags: form.tags,
       type: form.type,
       text: form.text,
       image_url: form.image_url || null,
@@ -82,6 +85,20 @@ export default function QuestionEditor({ tree, question, onCancel, onSaved }) {
       onSaved();
     } catch (err) {
       setError(err.response?.data?.error || "Couldn't save the question");
+      if (err.response?.status === 409 && isEdit) setLocked(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveTagsOnly() {
+    setError("");
+    setBusy(true);
+    try {
+      await api.put(`/questions/${question.id}/tags`, { tags: form.tags });
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.error || "Couldn't save the tags");
     } finally {
       setBusy(false);
     }
@@ -98,12 +115,24 @@ export default function QuestionEditor({ tree, question, onCancel, onSaved }) {
       </div>
 
       {error && <p className="error">{error}</p>}
+      {locked && (
+        <p className="note locked-note">
+          You can still change where this question sits in the syllabus.
+          <button type="button" className="small" onClick={saveTagsOnly} disabled={busy}>Save syllabus tags only</button>
+        </p>
+      )}
 
       <div className="editor-cols">
         <div className="card form-grid">
           <div className="field full">
-            <span className="label">Topic</span>
-            <div className="picker-row"><SyllabusPicker tree={tree} value={form} onChange={set} /></div>
+            <span className="label">Syllabus: tag at chapter level or deeper, in one or both</span>
+            {SYLLABUS_EXAMS.map((exam) => (
+              <div className="tag-picker" key={exam}>
+                <span className={`exam-chip exam-${exam}`}>{SYLLABUS_LABEL[exam]}</span>
+                <NodePicker exam={exam} value={form.tags[exam]} onChange={(id) => setTag(exam, id)}
+                  anyLabel="Not in this syllabus" requireTaggable />
+              </div>
+            ))}
           </div>
 
           <div className="field full">

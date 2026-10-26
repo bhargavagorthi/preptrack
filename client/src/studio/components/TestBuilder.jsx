@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../api";
-import SyllabusPicker from "./SyllabusPicker";
-import { TYPE_LABEL, EXAM_LABEL } from "../constants";
+import NodePicker from "../syllabus/NodePicker";
+import TagChips from "../syllabus/TagChips";
+import { TYPE_LABEL, EXAM_LABEL, SYLLABUS_EXAMS, SYLLABUS_LABEL } from "../constants";
 import MathText from "../components/MathText";
 
-const EMPTY_FILTERS = { subject_id: "", chapter_id: "", topic_id: "", type: "", difficulty: "", search: "" };
+const EMPTY_FILTERS = { scope: "", node_id: null, type: "", difficulty: "", search: "" };
+const SUBJECT_ORDER = ["Physics", "Chemistry", "Mathematics"];
 
 // <input type="datetime-local"> works in local time; the server stores UTC
 function toLocalInput(iso) {
@@ -25,7 +27,6 @@ export default function TestBuilder({ testId, onBack }) {
   const [meta, setMeta] = useState(null);
   const [selected, setSelected] = useState([]);
   const [dirty, setDirty] = useState(false);
-  const [tree, setTree] = useState([]);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [results, setResults] = useState([]);
   const [error, setError] = useState("");
@@ -52,16 +53,17 @@ export default function TestBuilder({ testId, onBack }) {
     loadTest().catch(() => setError("Couldn't load the test"));
   }, [loadTest]);
 
-  useEffect(() => {
-    api.get("/syllabus").then((r) => setTree(r.data.subjects)).catch(() => {});
-  }, []);
+  // Browse the question bank in the test's own syllabus by default
+  const scope = filters.scope || (SYLLABUS_EXAMS.includes(test?.exam) ? test.exam : "jee_main");
 
   useEffect(() => {
-    const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ""));
+    if (!test) return;
+    const params = filters.node_id ? { node_id: filters.node_id } : { exam: scope };
+    for (const k of ["type", "difficulty", "search"]) if (filters[k]) params[k] = filters[k];
     api.get("/questions", { params })
       .then((r) => setResults(r.data.questions))
       .catch(() => setError("Couldn't load questions"));
-  }, [filters]);
+  }, [filters, scope, test]);
 
   if (!test || !meta) {
     return <div className="page"><p className="muted">{error || "Loading…"}</p></div>;
@@ -85,8 +87,8 @@ export default function TestBuilder({ testId, onBack }) {
     changeList(list);
   }
   function sortBySubject() {
-    const order = Object.fromEntries(tree.map((s, i) => [s.name, i]));
-    changeList([...selected].sort((a, b) => (order[a.subject] ?? 99) - (order[b.subject] ?? 99)));
+    const rank = (q) => (SUBJECT_ORDER.includes(q.subject) ? SUBJECT_ORDER.indexOf(q.subject) : 99);
+    changeList([...selected].sort((a, b) => rank(a) - rank(b)));
   }
 
   async function act(fn, successText) {
@@ -219,7 +221,7 @@ export default function TestBuilder({ testId, onBack }) {
                   <div className="sel-body">
                     <MathText className="sel-text" text={q.text} />
                     <div className="q-tags">
-                      <span className="tag">{q.subject} › {q.chapter}</span>
+                      <TagChips tags={q.tags} depth={2} />
                       <span className="tag">{TYPE_LABEL[q.type]}</span>
                       <span className="tag">+{q.marks_correct} / {q.marks_wrong}</span>
                     </div>
@@ -241,8 +243,11 @@ export default function TestBuilder({ testId, onBack }) {
           <div className="card">
             <div className="col-head"><h3>Add from the question bank</h3></div>
             <div className="filters compact">
-              <SyllabusPicker tree={tree} value={filters} allowAny
-                onChange={(p) => setFilters((f) => ({ ...f, ...p }))} />
+              <select value={scope} onChange={(e) => setFilters((f) => ({ ...f, scope: e.target.value, node_id: null }))}>
+                {SYLLABUS_EXAMS.map((e) => <option key={e} value={e}>{SYLLABUS_LABEL[e]} syllabus</option>)}
+              </select>
+              <NodePicker exam={scope} value={filters.node_id} anyLabel="All subjects" compact
+                onChange={(id) => setFilters((f) => ({ ...f, node_id: id }))} />
               <select value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}>
                 <option value="">All types</option>
                 {Object.entries(TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -263,7 +268,7 @@ export default function TestBuilder({ testId, onBack }) {
                   <div className="sel-body">
                     <MathText className="sel-text" text={q.text} />
                     <div className="q-tags">
-                      <span className="tag">{q.subject} › {q.topic}</span>
+                      <TagChips tags={q.tags} depth={2} />
                       <span className="tag">{TYPE_LABEL[q.type]}</span>
                       <span className={`tag diff-${q.difficulty}`}>{q.difficulty}</span>
                     </div>

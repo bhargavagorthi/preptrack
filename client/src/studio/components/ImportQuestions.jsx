@@ -92,8 +92,8 @@ export default function ImportQuestions({ onCancel, onDone }) {
         <div>
           <h3>Get the template</h3>
           <p className="muted">
-            It includes a <b>Valid topics</b> sheet with every subject, chapter and topic. Rows must match these
-            exactly. The import never creates chapters or topics.
+            Each row has a <b>main_path</b> and/or <b>advanced_path</b>, e.g. <code>Physics &gt; Kinematics &gt; Projectile Motion</code>.
+            The <b>Valid paths</b> sheets list every chapter, topic, subtopic and section. The import never creates syllabus entries.
           </p>
           <button className="ghost" onClick={downloadTemplate}>⬇ Download template</button>
         </div>
@@ -139,14 +139,14 @@ export default function ImportQuestions({ onCancel, onDone }) {
           <div className="table-wrap">
             <table className="table">
               <thead>
-                <tr><th>Row</th><th></th><th>Topic</th><th>Type</th><th>Question</th><th>Problems</th></tr>
+                <tr><th>Row</th><th></th><th>Syllabus</th><th>Type</th><th>Question</th><th>Problems</th></tr>
               </thead>
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.row} className={r.ok ? "" : "row-bad"}>
                     <td>{r.row}</td>
                     <td>{r.ok ? "✅" : "❌"}</td>
-                    <td className="nowrap">{r.path}</td>
+                    <td className="path-cell">{r.path}</td>
                     <td>{TYPE_LABEL[r.type] || r.type}</td>
                     <td className="clip">{r.text}</td>
                     <td className="problems">{r.errors.join(" · ")}</td>

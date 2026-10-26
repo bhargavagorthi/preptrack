@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { TAG_COLUMNS, shapeTags } = require("./questions");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("creator", "admin"));
@@ -92,17 +93,15 @@ router.get("/:id", async (req, res) => {
   const q = await pool.query(
     `SELECT q.id, q.type, q.text, q.difficulty, tq.position,
             tq.marks_correct::float8 AS marks_correct, tq.marks_wrong::float8 AS marks_wrong,
-            tp.name AS topic, c.name AS chapter, s.name AS subject
+            ${TAG_COLUMNS}
      FROM test_questions tq
      JOIN questions q ON q.id = tq.question_id
-     JOIN topics tp ON tp.id = q.topic_id
-     JOIN chapters c ON c.id = tp.chapter_id
-     JOIN subjects s ON s.id = c.subject_id
+     LEFT JOIN question_tags qt ON qt.question_id = q.id
      WHERE tq.test_id = $1
      ORDER BY tq.position`,
     [req.params.id]
   );
-  res.json({ test: rows[0], questions: q.rows });
+  res.json({ test: rows[0], questions: q.rows.map(shapeTags) });
 });
 
 // PATCH /api/tests/:id: details and contest window (drafts only)

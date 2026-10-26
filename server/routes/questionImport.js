@@ -4,6 +4,7 @@ const ExcelJS = require("exceljs");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { validate } = require("./questions");
+const { EXAMS, EXAM_LABEL, loadTree, pathResolver, saveTags } = require("../lib/syllabus");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("creator", "admin"));
@@ -12,8 +13,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 const MAX_ROWS = 1000;
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
+const PATH_COLUMNS = { jee_main: "main_path", jee_advanced: "advanced_path" };
 const COLUMNS = [
-  "subject", "chapter", "topic", "type", "question",
+  "main_path", "advanced_path", "type", "question",
   ...LETTERS.map((l) => `option_${l.toLowerCase()}`),
   "correct", "tolerance", "difficulty", "marks_correct", "marks_wrong", "solution",
 ];
@@ -26,37 +28,28 @@ const DEFAULT_MARKS = { single: [4, -1], multiple: [4, -2], numerical: [4, 0] };
 const norm = (s) => String(s ?? "").trim().toLowerCase();
 const blank = (v) => v === "" || v == null;
 
-// Load the existing syllabus. The import only MATCHES against it and never creates anything.
+// Load both syllabus trees. The import only MATCHES against them and never creates anything.
 async function loadSyllabus() {
-  const { rows } = await pool.query(
-    `SELECT s.name AS subject, c.name AS chapter, t.name AS topic, t.id AS topic_id
-     FROM subjects s
-     LEFT JOIN chapters c ON c.subject_id = s.id
-     LEFT JOIN topics t ON t.chapter_id = c.id
-     ORDER BY s.position, s.id, c.position, c.id, t.position, t.id`
-  );
-  const subjects = new Set();
-  const chapters = new Set();
-  const topics = new Map();
-  for (const r of rows) {
-    subjects.add(norm(r.subject));
-    if (r.chapter) chapters.add(`${norm(r.subject)}|${norm(r.chapter)}`);
-    if (r.topic) topics.set(`${norm(r.subject)}|${norm(r.chapter)}|${norm(r.topic)}`, r.topic_id);
+  const trees = {};
+  for (const exam of EXAMS) {
+    const nodes = await loadTree(exam);
+    trees[exam] = { nodes, resolve: pathResolver(nodes) };
   }
-  return { rows, subjects, chapters, topics };
+  return trees;
 }
 
 // Turn one spreadsheet row into a question, collecting every problem found
 function buildQuestion(raw, syl) {
   const errors = [];
-  const s = norm(raw.subject), c = norm(raw.chapter), t = norm(raw.topic);
-  let topic_id = null;
-
-  if (!s || !c || !t) errors.push("Subject, chapter and topic are all required");
-  else if (!syl.subjects.has(s)) errors.push(`Subject "${raw.subject}" doesn't exist`);
-  else if (!syl.chapters.has(`${s}|${c}`)) errors.push(`Chapter "${raw.chapter}" doesn't exist in ${raw.subject}`);
-  else if (!syl.topics.has(`${s}|${c}|${t}`)) errors.push(`Topic "${raw.topic}" doesn't exist in ${raw.chapter}`);
-  else topic_id = syl.topics.get(`${s}|${c}|${t}`);
+  const tags = {};
+  for (const exam of EXAMS) {
+    const text = raw[PATH_COLUMNS[exam]];
+    if (!text) continue;
+    const found = syl[exam].resolve(text);
+    if (found.error) errors.push(`${EXAM_LABEL[exam]}: ${found.error}`);
+    else if (found.node) tags[exam] = found.node.id;
+  }
+  if (!raw.main_path && !raw.advanced_path) errors.push("Fill main_path, advanced_path, or both");
 
   const type = TYPE_ALIASES[norm(raw.type)];
   if (!type) {
@@ -65,7 +58,7 @@ function buildQuestion(raw, syl) {
   }
 
   const body = {
-    topic_id: topic_id ?? -1,
+    tags: Object.keys(tags).length ? tags : { jee_main: -1 },
     type,
     text: raw.question,
     difficulty: norm(raw.difficulty) || "medium",
@@ -87,7 +80,7 @@ function buildQuestion(raw, syl) {
   }
 
   const { error, value } = validate(body);
-  if (error) errors.push(error);
+  if (error && !(errors.length && /tag/i.test(error))) errors.push(error);
   return errors.length ? { errors } : { errors, question: value };
 }
 
@@ -99,22 +92,22 @@ async function processRows(rawRows) {
   const seen = new Map();
   for (const r of results) {
     if (!r.question) continue;
-    const key = `${r.question.topic_id}|${norm(r.question.text)}`;
+    const key = norm(r.question.text);
     if (seen.has(key)) {
       r.errors.push(`Duplicate of row ${seen.get(key)}`);
       delete r.question;
     } else seen.set(key, r.row);
   }
 
-  const topicIds = [...new Set(results.filter((r) => r.question).map((r) => r.question.topic_id))];
-  if (topicIds.length) {
+  const texts = [...seen.keys()];
+  if (texts.length) {
     const { rows } = await pool.query(
-      "SELECT topic_id, lower(trim(text)) AS text FROM questions WHERE topic_id = ANY($1)",
-      [topicIds]
+      "SELECT lower(trim(text)) AS text FROM questions WHERE lower(trim(text)) = ANY($1)",
+      [texts]
     );
-    const existing = new Set(rows.map((x) => `${x.topic_id}|${x.text}`));
+    const existing = new Set(rows.map((x) => x.text));
     for (const r of results) {
-      if (r.question && existing.has(`${r.question.topic_id}|${norm(r.question.text)}`)) {
+      if (r.question && existing.has(norm(r.question.text))) {
         r.errors.push("Already in the question bank");
         delete r.question;
       }
@@ -134,7 +127,8 @@ async function readRows(buffer) {
   ws.getRow(1).eachCell((cell, col) => {
     headers[norm(cell.text).replace(/\s+/g, "_")] = col;
   });
-  const missing = ["subject", "chapter", "topic", "type", "question", "correct"].filter((h) => !headers[h]);
+  const missing = ["type", "question", "correct"].filter((h) => !headers[h]);
+  if (!headers.main_path && !headers.advanced_path) missing.unshift("main_path / advanced_path");
   if (missing.length) throw new Error(`missing column(s): ${missing.join(", ")}. Please use the template.`);
 
   const get = (row, key) => (headers[key] ? row.getCell(headers[key]).text.trim() : "");
@@ -143,9 +137,8 @@ async function readRows(buffer) {
     if (n === 1) return;
     const raw = {
       row: n,
-      subject: get(row, "subject"),
-      chapter: get(row, "chapter"),
-      topic: get(row, "topic"),
+      main_path: get(row, "main_path"),
+      advanced_path: get(row, "advanced_path"),
       type: get(row, "type"),
       question: get(row, "question"),
       options: Object.fromEntries(LETTERS.map((l) => [l, get(row, `option_${l.toLowerCase()}`)])),
@@ -156,7 +149,7 @@ async function readRows(buffer) {
       marks_wrong: get(row, "marks_wrong"),
       solution: get(row, "solution"),
     };
-    const isEmpty = !raw.question && !raw.subject && !raw.topic;
+    const isEmpty = !raw.question && !raw.main_path && !raw.advanced_path;
     const isExample = raw.question.toUpperCase().startsWith("EXAMPLE:");
     if (!isEmpty && !isExample) rows.push(raw);
   });
@@ -177,30 +170,35 @@ router.get("/template", async (req, res) => {
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: "frozen", ySplit: 1 }];
 
-  const ex = syl.rows.find((r) => r.topic) || { subject: "Physics", chapter: "Kinematics", topic: "Projectile motion" };
-  const base = { subject: ex.subject, chapter: ex.chapter, topic: ex.topic };
+  const pick = (exam) => {
+    const n = syl[exam].nodes.find((x) => x.level === "topic") || syl[exam].nodes.find((x) => x.level === "chapter");
+    return n ? n.ids.map((id) => syl[exam].nodes.find((x) => x.id === id).name).join(" > ") : "";
+  };
+  const base = { main_path: pick("jee_main"), advanced_path: pick("jee_advanced") };
   ws.addRow({ ...base, type: "single", question: "EXAMPLE: Which of these is a vector quantity?",
     option_a: "Speed", option_b: "Velocity", option_c: "Distance", option_d: "Mass",
     correct: "B", difficulty: "easy", solution: "Velocity has both magnitude and direction." });
-  ws.addRow({ ...base, type: "multiple", question: "EXAMPLE: Which of these are SI base units?",
+  ws.addRow({ ...base, advanced_path: "", type: "multiple", question: "EXAMPLE: Which of these are SI base units?",
     option_a: "kilogram", option_b: "newton", option_c: "ampere", option_d: "joule",
     correct: "A,C", difficulty: "medium" });
   ws.addRow({ ...base, type: "numerical",
-    question: "EXAMPLE: A body starts from rest with acceleration 2 m/s². Its speed in m/s after 5 s is?",
-    correct: 10, tolerance: 0, difficulty: "easy", solution: "v = u + at = 0 + 2 × 5 = 10" });
+    question: "EXAMPLE: A body starts from rest with acceleration $2\\,\\text{m/s}^2$. Its speed in m/s after 5 s is?",
+    correct: 10, tolerance: 0, difficulty: "easy", solution: "$v = u + at = 0 + 2 \\times 5 = 10$" });
   ws.getRows(2, 3).forEach((r) => (r.font = { italic: true, color: { argb: "FF888888" } }));
 
-  ws.dataValidations.add("D2:D1001", { type: "list", allowBlank: true, formulae: ['"single,multiple,numerical"'] });
-  ws.dataValidations.add("N2:N1001", { type: "list", allowBlank: true, formulae: ['"easy,medium,hard"'] });
+  ws.dataValidations.add("C2:C1001", { type: "list", allowBlank: true, formulae: ['"single,multiple,numerical"'] });
+  ws.dataValidations.add("M2:M1001", { type: "list", allowBlank: true, formulae: ['"easy,medium,hard"'] });
 
-  const topicsSheet = wb.addWorksheet("Valid topics");
-  topicsSheet.columns = [
-    { header: "subject", key: "subject", width: 18 },
-    { header: "chapter", key: "chapter", width: 32 },
-    { header: "topic", key: "topic", width: 36 },
-  ];
-  topicsSheet.getRow(1).font = { bold: true };
-  syl.rows.filter((r) => r.topic).forEach((r) => topicsSheet.addRow(r));
+  for (const exam of EXAMS) {
+    const sheet = wb.addWorksheet(exam === "jee_main" ? "Valid paths - Main" : "Valid paths - Advanced");
+    sheet.columns = [{ header: "level", key: "level", width: 10 }, { header: "path", key: "path", width: 110 }];
+    sheet.getRow(1).font = { bold: true };
+    const byId = new Map(syl[exam].nodes.map((n) => [n.id, n]));
+    for (const n of syl[exam].nodes) {
+      if (["subject", "cluster"].includes(n.level)) continue;
+      sheet.addRow({ level: n.level, path: n.ids.map((id) => byId.get(id).name).join(" > ") });
+    }
+  }
 
   const help = wb.addWorksheet("Instructions");
   help.getColumn(1).width = 110;
@@ -208,8 +206,12 @@ router.get("/template", async (req, res) => {
     "PrepTrack question import",
     "",
     "• One question per row on the 'Questions' sheet. Rows starting with 'EXAMPLE:' are ignored.",
-    "• subject / chapter / topic must match an existing entry exactly. See the 'Valid topics' sheet.",
-    "• The import never creates chapters or topics. Ask a creator to add them in Syllabus first.",
+    "• main_path / advanced_path: where the question sits in each syllabus. Fill one or both.",
+    "  Write it as  Subject > Cluster > Chapter > Topic > Subtopic > Section  and stop at any level from chapter down.",
+    "  You can leave out levels (e.g. Physics > Kinematics > Projectile Motion) if the result is still unique.",
+    "  Copy exact paths from the 'Valid paths' sheets.",
+    "• The import never creates syllabus entries. Ask a creator to add them on the Syllabus page first.",
+    "• Math: write $...$ for inline formulas and $$...$$ for display formulas.",
     "• type: single, multiple or numerical.",
     "• single / multiple: fill option_a, option_b… in order with no gaps (2 to 6 options).",
     "• correct: one letter for single (B), comma-separated letters for multiple (A,C), a number for numerical (9.8).",
@@ -245,7 +247,8 @@ router.post("/preview", upload.single("file"), async (req, res) => {
       ok: Boolean(r.question),
       errors: r.errors,
       raw: r.raw,
-      path: `${r.raw.subject} › ${r.raw.chapter} › ${r.raw.topic}`,
+      path: [r.raw.main_path && `Main: ${r.raw.main_path}`, r.raw.advanced_path && `Adv: ${r.raw.advanced_path}`]
+        .filter(Boolean).join("  ·  "),
       type: r.question?.type || r.raw.type,
       text: r.raw.question,
     })),
@@ -265,13 +268,14 @@ router.post("/commit", async (req, res) => {
   try {
     await client.query("BEGIN");
     for (const { question: q } of good) {
-      await client.query(
+      const { rows: [row] } = await client.query(
         `INSERT INTO questions
-           (topic_id, type, text, options, answer, solution, difficulty, marks_correct, marks_wrong, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [q.topic_id, q.type, q.text, q.options && JSON.stringify(q.options), JSON.stringify(q.answer),
+           (type, text, options, answer, solution, difficulty, marks_correct, marks_wrong, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        [q.type, q.text, q.options && JSON.stringify(q.options), JSON.stringify(q.answer),
          q.solution, q.difficulty, q.marks_correct, q.marks_wrong, req.user.id]
       );
+      await saveTags(client, row.id, q.tags);
     }
     await client.query("COMMIT");
   } catch (err) {

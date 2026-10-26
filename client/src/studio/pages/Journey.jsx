@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api";
+import { useAuth } from "../../auth/AuthContext";
+import ExamSwitch from "../syllabus/ExamSwitch";
+import { SYLLABUS_LABEL } from "../constants";
 
 const STATUS = {
   mastered: { label: "Mastered", icon: "🏆" },
@@ -37,26 +40,40 @@ function TopicCard({ t, onPractise, busy }) {
 
 export default function Journey() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [exam, setExam] = useState(user?.target_exam || "jee_main");
   const [data, setData] = useState(null);
   const [subjectId, setSubjectId] = useState(null);
+  const [open, setOpen] = useState(() => new Set()); // expanded chapters
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get("/student/journey")
+    setData(null);
+    api.get("/student/journey", { params: { exam } })
       .then((r) => {
         setData(r.data);
         const first = r.data.subjects.find((s) => s.total > 0) || r.data.subjects[0];
         setSubjectId(first?.id ?? null);
+        // Open the chapters the student has already started
+        const started = r.data.subjects.flatMap((s) => s.clusters.flatMap((cl) => cl.chapters))
+          .filter((c) => c.status === "in_progress").map((c) => c.id);
+        setOpen(new Set(started));
       })
       .catch(() => setError("Couldn't load your journey"));
-  }, []);
+  }, [exam]);
+
+  const toggleChapter = (id) => setOpen((s) => {
+    const n = new Set(s);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
 
   async function practise(t) {
     setError("");
     setBusyId(t.id);
     try {
-      const { data: res } = await api.post("/student/journey/practice", { topic_id: t.id });
+      const { data: res } = await api.post("/student/journey/practice", { node_id: t.id });
       navigate(`/studio/tests/attempt/${res.attempt_id}`);
     } catch (e) {
       setError(e.response?.data?.error || "Couldn't start practice");
@@ -73,8 +90,12 @@ export default function Journey() {
   return (
     <div className="page">
       <div>
-        <h1>Syllabus Journey</h1>
+        <div className="page-head">
+          <h1>Syllabus Journey</h1>
+          <ExamSwitch value={exam} onChange={setExam} />
+        </div>
         <p className="muted">
+          Following the <b>{SYLLABUS_LABEL[data.exam]}</b> syllabus.
           Master every topic. A topic is mastered at {rules.masteredAccuracy}%+ accuracy on your last {rules.recentWindow} answers
           (minimum {rules.masteredMinAttempted}).
         </p>
@@ -122,32 +143,56 @@ export default function Journey() {
         ))}
       </div>
 
-      {!subject || subject.chapters.length === 0 ? (
+      {!subject || subject.clusters.every((cl) => cl.chapters.length === 0) ? (
         <div className="card empty"><p>No chapters have been added to this subject yet.</p></div>
       ) : (
-        <div className="journey-path">
-          {subject.chapters.map((c, i) => (
-            <div key={c.id} className={`chapter-node ch-${c.status}`}>
-              <div className="node-dot">{c.status === "mastered" ? "✓" : i + 1}</div>
-              <div className="card chapter-body">
-                <div className="chapter-head">
-                  <h3>{c.name}</h3>
-                  <span className="muted">{c.counts.mastered} / {c.total} mastered</span>
-                </div>
-                <div className="xp-track thin"><div className="xp-fill" style={{ width: `${c.progress_pct}%` }} /></div>
-                {c.topics.length === 0 ? (
-                  <p className="muted">No topics in this chapter yet.</p>
-                ) : (
-                  <div className="topic-grid">
-                    {c.topics.map((t) => (
-                      <TopicCard key={t.id} t={t} onPractise={practise} busy={busyId === t.id} />
-                    ))}
-                  </div>
-                )}
-              </div>
+        subject.clusters.filter((cl) => cl.chapters.length).map((cl) => (
+          <section key={cl.id} className="cluster-block">
+            <div className="cluster-head">
+              <h2>{cl.name}</h2>
+              <span className="muted">{cl.counts.mastered} / {cl.total} topics mastered</span>
+              <div className="xp-track thin"><div className="xp-fill" style={{ width: `${cl.progress_pct}%` }} /></div>
             </div>
-          ))}
-        </div>
+            <div className="journey-path">
+              {cl.chapters.map((c) => {
+                const number = subject.clusters.flatMap((x) => x.chapters).indexOf(c) + 1;
+                const isOpen = open.has(c.id);
+                return (
+                  <div key={c.id} className={`chapter-node ch-${c.status}`}>
+                    <div className="node-dot">{c.status === "mastered" ? "✓" : number}</div>
+                    <div className="card chapter-body">
+                      <div className="chapter-head">
+                        <h3 className="clickable" onClick={() => toggleChapter(c.id)}>
+                          {isOpen ? "▾" : "▸"} {c.name}
+                        </h3>
+                        <span className="muted">{c.counts.mastered} / {c.total} mastered</span>
+                      </div>
+                      <div className="xp-track thin"><div className="xp-fill" style={{ width: `${c.progress_pct}%` }} /></div>
+                      <div className="chapter-actions">
+                        <button className="ghost small" onClick={() => toggleChapter(c.id)}>
+                          {isOpen ? "Hide topics" : `Show ${c.total} topic${c.total === 1 ? "" : "s"}`}
+                        </button>
+                        <button className="small" disabled={!c.available || busyId != null} onClick={() => practise(c)}
+                          title={c.available ? `${c.available} questions available` : "No questions yet"}>
+                          {busyId === c.id ? "Starting…" : c.available ? "Practise whole chapter" : "No questions yet"}
+                        </button>
+                      </div>
+                      {isOpen && (c.topics.length === 0 ? (
+                        <p className="muted">No topics in this chapter yet.</p>
+                      ) : (
+                        <div className="topic-grid">
+                          {c.topics.map((t) => (
+                            <TopicCard key={t.id} t={t} onPractise={practise} busy={busyId === t.id} />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))
       )}
     </div>
   );

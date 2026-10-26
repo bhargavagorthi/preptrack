@@ -2,6 +2,7 @@ const express = require("express");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { finalize } = require("./student");
+const { EXAMS } = require("../lib/syllabus");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("student"));
@@ -28,10 +29,12 @@ const finish = (o) => ({
 const BASE = `
   FROM attempt_answers aa
   JOIN attempts a ON a.id = aa.attempt_id AND a.status = 'submitted' AND a.student_id = $1
-  JOIN questions q ON q.id = aa.question_id
-  JOIN topics tp ON tp.id = q.topic_id
-  JOIN chapters c ON c.id = tp.chapter_id
-  JOIN subjects s ON s.id = c.subject_id`;
+  JOIN questions q ON q.id = aa.question_id`;
+
+// Same, but only questions tagged in the chosen syllabus tree ($2), with their place in it
+const TREE_BASE = `${BASE}
+  JOIN question_nodes qn ON qn.question_id = q.id AND qn.exam = $2
+  JOIN node_paths np ON np.id = qn.node_id`;
 
 const METRICS = `
   COUNT(*)::int AS seen,
@@ -55,6 +58,8 @@ async function breakdown(studentId, column, order) {
 // GET /api/student/analytics
 router.get("/", async (req, res) => {
   const me = req.user.id;
+  const { rows: [u] } = await pool.query("SELECT target_exam FROM users WHERE id = $1", [me]);
+  const exam = EXAMS.includes(req.query.exam) ? req.query.exam : u.target_exam;
 
   // Score attempts whose time ran out while the student was away
   const { rows: expired } = await pool.query(
@@ -63,7 +68,7 @@ router.get("/", async (req, res) => {
   );
   for (const e of expired) await finalize(e.id, true);
 
-  const [testsQ, topicsQ, byDifficulty, byType] = await Promise.all([
+  const [testsQ, topicsQ, overallQ, byDifficulty, byType] = await Promise.all([
     pool.query(
       `SELECT a.id AS attempt_id, t.title, t.exam, a.submitted_at,
               a.score::float8 AS score, a.max_score::float8 AS max_score,
@@ -74,13 +79,15 @@ router.get("/", async (req, res) => {
       [me]
     ),
     pool.query(
-      `SELECT s.id AS subject_id, s.name AS subject, c.id AS chapter_id, c.name AS chapter,
-              tp.id AS topic_id, tp.name AS topic, ${METRICS}
-       ${BASE}
-       GROUP BY s.id, c.id, tp.id
-       ORDER BY s.position, s.id, c.position, c.id, tp.position, tp.id`,
-      [me]
+      `SELECT np.subject_id, np.subject, np.cluster, np.chapter_id, np.chapter,
+              COALESCE(np.topic_id, np.chapter_id) AS topic_id,
+              COALESCE(np.topic, 'Chapter-level questions') AS topic, ${METRICS}
+       ${TREE_BASE}
+       GROUP BY np.subject_id, np.subject, np.cluster, np.chapter_id, np.chapter, np.topic_id, np.topic
+       ORDER BY MIN(np.sort_key)`,
+      [me, exam]
     ),
+    pool.query(`SELECT ${METRICS} ${BASE}`, [me]),
     breakdown(me, "difficulty", ["easy", "medium", "hard"]),
     breakdown(me, "type", ["single", "multiple", "numerical"]),
   ]);
@@ -98,7 +105,7 @@ router.get("/", async (req, res) => {
     }
     let c = s.chapterMap.get(r.chapter_id);
     if (!c) {
-      c = { id: r.chapter_id, name: r.chapter, ...blank(), topics: [] };
+      c = { id: r.chapter_id, name: r.chapter, cluster: r.cluster, ...blank(), topics: [] };
       s.chapterMap.set(r.chapter_id, c);
       s.chapters.push(c);
     }
@@ -109,7 +116,8 @@ router.get("/", async (req, res) => {
     add(s, r);
   }
   const subjectsOut = subjects.map(({ chapterMap, ...s }) => ({ ...finish(s), chapters: s.chapters.map(finish) }));
-  const overall = finish(topicsQ.rows.reduce((acc, r) => add(acc, r), blank()));
+  const overall = finish(add(blank(), overallQ.rows[0]));
+  const inTree = topicsQ.rows.reduce((n, r) => n + r.seen, 0);
 
   const trend = testsQ.rows.map((t, i) => ({
     label: `T${i + 1}`,
@@ -136,6 +144,8 @@ router.get("/", async (req, res) => {
   };
 
   res.json({
+    exam,
+    outside_tree: overall.seen - inTree, // answered questions not tagged in this syllabus
     overview: {
       tests_taken: trend.length,
       avg_score_pct: scored.length ? Math.round((scored.reduce((a, b) => a + b, 0) / scored.length) * 10) / 10 : null,

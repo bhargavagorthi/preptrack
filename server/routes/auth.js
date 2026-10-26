@@ -77,10 +77,23 @@ router.post("/login", async (req, res) => {
 // GET /api/auth/me — who am I? (requires a token)
 router.get("/me", requireAuth, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, name, email, role, status, organization_id FROM users WHERE id = $1",
+    "SELECT id, name, email, role, status, organization_id, target_exam FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!rows[0]) return res.status(404).json({ error: "User not found" });
+  res.json({ user: rows[0] });
+});
+
+// PATCH /api/auth/me  { target_exam }: which syllabus a student follows (JEE Main or JEE Advanced)
+router.patch("/me", requireAuth, async (req, res) => {
+  const { target_exam } = req.body;
+  if (!["jee_main", "jee_advanced"].includes(target_exam))
+    return res.status(400).json({ error: "target_exam must be jee_main or jee_advanced" });
+  const { rows } = await pool.query(
+    `UPDATE users SET target_exam = $1 WHERE id = $2
+     RETURNING id, name, email, role, status, organization_id, target_exam`,
+    [target_exam, req.user.id]
+  );
   res.json({ user: rows[0] });
 });
 

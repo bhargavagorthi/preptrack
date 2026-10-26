@@ -4,7 +4,9 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine,
 } from "recharts";
 import api from "../../api";
-import { TYPE_LABEL } from "../constants";
+import { TYPE_LABEL, SYLLABUS_LABEL } from "../constants";
+import ExamSwitch from "../syllabus/ExamSwitch";
+import { useAuth } from "../../auth/AuthContext";
 
 const fmtTime = (s) => (s == null ? "—" : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
 const band = (a) => (a == null ? "" : a >= 75 ? "good" : a >= 50 ? "mid" : "low");
@@ -66,14 +68,16 @@ function BreakdownTable({ title, rows, label }) {
 }
 
 export default function Analytics() {
+  const { user } = useAuth();
+  const [exam, setExam] = useState(user?.target_exam || "jee_main");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get("/student/analytics")
+    api.get("/student/analytics", { params: { exam } })
       .then((r) => setData(r.data))
       .catch(() => setError("Couldn't load your analytics"));
-  }, []);
+  }, [exam]);
 
   if (error) return <div className="page"><p className="error">{error}</p></div>;
   if (!data) return <div className="page"><p className="muted">Loading…</p></div>;
@@ -95,8 +99,14 @@ export default function Analytics() {
   return (
     <div className="page">
       <div>
-        <h1>Analytics</h1>
-        <p className="muted">Based on {o.tests_taken} completed test{o.tests_taken === 1 ? "" : "s"}.</p>
+        <div className="page-head">
+          <h1>Analytics</h1>
+          <ExamSwitch value={exam} onChange={setExam} />
+        </div>
+        <p className="muted">
+          Based on {o.tests_taken} completed test{o.tests_taken === 1 ? "" : "s"}. Topic breakdown uses the {SYLLABUS_LABEL[data.exam]} syllabus.
+          {data.outside_tree > 0 && <> {data.outside_tree} answered question{data.outside_tree === 1 ? " isn't" : "s aren't"} tagged in this syllabus, so they count in your totals but not in the topic breakdown.</>}
+        </p>
       </div>
 
       <div className="stat-grid">
@@ -171,7 +181,7 @@ export default function Analytics() {
                   {s.chapters.flatMap((c) =>
                     c.topics.map((t, i) => (
                       <tr key={t.id}>
-                        <td>{i === 0 ? <b>{c.name}</b> : ""}</td>
+                        <td>{i === 0 ? <><b>{c.name}</b>{c.cluster && <div className="muted small">{c.cluster}</div>}</> : ""}</td>
                         <td>{t.name}</td>
                         <td className="acc-cell"><AccBar value={t.accuracy} /></td>
                         <td>{t.attempted} / {t.seen}</td>

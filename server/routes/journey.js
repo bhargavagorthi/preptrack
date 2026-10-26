@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { EXAMS, TAGGABLE, loadTree, subtreeIds } = require("../lib/syllabus");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("student"));
@@ -39,91 +40,111 @@ async function activePractice(studentId) {
   return p || null;
 }
 
-// GET /api/student/journey: the full syllabus with this student's status on every topic
+// Questions in an upcoming or live contest can't be practised
+const NOT_IN_LIVE_CONTEST = `NOT EXISTS (
+  SELECT 1 FROM test_questions ctq JOIN tests ct ON ct.id = ctq.test_id
+  WHERE ctq.question_id = q.id AND ct.is_contest AND ct.status = 'published' AND ct.ends_at > now())`;
+
+// GET /api/student/journey?exam=: the chosen syllabus tree with this student's status on every topic
 router.get("/", async (req, res) => {
   const me = req.user.id;
-  const { rows } = await pool.query(
-    `WITH answered AS (
-       SELECT q.topic_id, aa.is_correct, a.submitted_at,
-              ROW_NUMBER() OVER (PARTITION BY q.topic_id ORDER BY a.submitted_at DESC, aa.question_id) AS rn
-       FROM attempt_answers aa
-       JOIN attempts a ON a.id = aa.attempt_id AND a.status = 'submitted' AND a.student_id = $1
-       JOIN questions q ON q.id = aa.question_id
-       WHERE aa.is_correct IS NOT NULL
-     ), stats AS (
+  const { rows: [u] } = await pool.query("SELECT target_exam FROM users WHERE id = $1", [me]);
+  const exam = EXAMS.includes(req.query.exam) ? req.query.exam : u.target_exam;
+
+  const [nodes, statsQ, availQ] = await Promise.all([
+    loadTree(exam),
+    // A topic's status uses answers to questions tagged to it or anything beneath it
+    pool.query(
+      `WITH answered AS (
+         SELECT np.topic_id, aa.is_correct, a.submitted_at,
+                ROW_NUMBER() OVER (PARTITION BY np.topic_id ORDER BY a.submitted_at DESC, aa.question_id) AS rn
+         FROM attempt_answers aa
+         JOIN attempts a ON a.id = aa.attempt_id AND a.status = 'submitted' AND a.student_id = $1
+         JOIN question_nodes qn ON qn.question_id = aa.question_id AND qn.exam = $2
+         JOIN node_paths np ON np.id = qn.node_id
+         WHERE aa.is_correct IS NOT NULL AND np.topic_id IS NOT NULL
+       )
        SELECT topic_id,
               COUNT(*)::int AS attempted,
               COUNT(*) FILTER (WHERE is_correct)::int AS correct,
-              COUNT(*) FILTER (WHERE rn <= $2)::int AS recent_attempted,
-              COUNT(*) FILTER (WHERE rn <= $2 AND is_correct)::int AS recent_correct,
+              COUNT(*) FILTER (WHERE rn <= $3)::int AS recent_attempted,
+              COUNT(*) FILTER (WHERE rn <= $3 AND is_correct)::int AS recent_correct,
               MAX(submitted_at) AS last_practised
-       FROM answered GROUP BY topic_id
-     ), available AS (
-       SELECT q.topic_id, COUNT(*)::int AS n FROM questions q WHERE NOT EXISTS (SELECT 1 FROM test_questions ctq JOIN tests ct ON ct.id = ctq.test_id WHERE ctq.question_id = q.id AND ct.is_contest AND ct.status = 'published' AND ct.ends_at > now()) GROUP BY q.topic_id
-     )
-     SELECT s.id AS subject_id, s.name AS subject,
-            c.id AS chapter_id, c.name AS chapter,
-            tp.id AS topic_id, tp.name AS topic,
-            COALESCE(av.n, 0) AS available,
-            COALESCE(st.attempted, 0) AS attempted, COALESCE(st.correct, 0) AS correct,
-            COALESCE(st.recent_attempted, 0) AS recent_attempted, COALESCE(st.recent_correct, 0) AS recent_correct,
-            st.last_practised
-     FROM subjects s
-     LEFT JOIN chapters c ON c.subject_id = s.id
-     LEFT JOIN topics tp ON tp.chapter_id = c.id
-     LEFT JOIN stats st ON st.topic_id = tp.id
-     LEFT JOIN available av ON av.topic_id = tp.id
-     ORDER BY s.position, s.id, c.position, c.id, tp.position, tp.id`,
-    [me, RULES.recentWindow]
-  );
+       FROM answered GROUP BY topic_id`,
+      [me, exam, RULES.recentWindow]
+    ),
+    pool.query(
+      `SELECT np.chapter_id, np.topic_id, COUNT(*)::int AS n
+       FROM questions q
+       JOIN question_nodes qn ON qn.question_id = q.id AND qn.exam = $1
+       JOIN node_paths np ON np.id = qn.node_id
+       WHERE ${NOT_IN_LIVE_CONTEST}
+       GROUP BY np.chapter_id, np.topic_id`,
+      [exam]
+    ),
+  ]);
 
-  // Build subject → chapter → topic
-  const subjects = [];
-  const sMap = new Map();
-  const cMap = new Map();
-  const allTopics = [];
-  for (const r of rows) {
-    let s = sMap.get(r.subject_id);
-    if (!s) {
-      s = { id: r.subject_id, name: r.subject, chapters: [] };
-      sMap.set(r.subject_id, s);
-      subjects.push(s);
-    }
-    if (!r.chapter_id) continue;
-    let c = cMap.get(r.chapter_id);
-    if (!c) {
-      c = { id: r.chapter_id, name: r.chapter, topics: [] };
-      cMap.set(r.chapter_id, c);
-      s.chapters.push(c);
-    }
-    if (!r.topic_id) continue;
-    const t = {
-      id: r.topic_id,
-      name: r.topic,
-      chapter: r.chapter,
-      subject: r.subject,
-      available: r.available,
-      attempted: r.attempted,
-      correct: r.correct,
-      accuracy: pct(r.correct, r.attempted),
-      recent_accuracy: pct(r.recent_correct, r.recent_attempted),
-      last_practised: r.last_practised,
-    };
-    t.status = statusOf(t);
-    c.topics.push(t);
-    allTopics.push(t);
+  const stats = new Map(statsQ.rows.map((r) => [r.topic_id, r]));
+  const topicAvail = new Map();
+  const chapterAvail = new Map();
+  for (const r of availQ.rows) {
+    if (r.topic_id) topicAvail.set(r.topic_id, (topicAvail.get(r.topic_id) || 0) + r.n);
+    if (r.chapter_id) chapterAvail.set(r.chapter_id, (chapterAvail.get(r.chapter_id) || 0) + r.n);
   }
 
-  // Progress for each chapter and subject
-  for (const s of subjects) {
-    for (const c of s.chapters) {
-      c.counts = countStatuses(c.topics);
-      c.total = c.topics.length;
-      c.progress_pct = pct(c.counts.mastered, c.total) ?? 0;
-      c.status = c.total && c.counts.mastered === c.total ? "mastered"
-        : c.topics.some((t) => t.attempted) ? "in_progress" : "not_started";
+  // Build subject → cluster → chapter → topic (subtopics and sections roll up into their topic)
+  const subjects = [];
+  const byId = new Map();
+  const allTopics = [];
+  for (const n of nodes) {
+    if (n.level === "subject") {
+      const s = { id: n.id, name: n.name, clusters: [] };
+      byId.set(n.id, s);
+      subjects.push(s);
+    } else if (n.level === "cluster") {
+      const c = { id: n.id, name: n.name, chapters: [] };
+      byId.set(n.id, c);
+      byId.get(n.parent_id)?.clusters.push(c);
+    } else if (n.level === "chapter") {
+      const c = { id: n.id, name: n.name, cluster: n.cluster, subject: n.subject, available: chapterAvail.get(n.id) || 0, topics: [] };
+      byId.set(n.id, c);
+      byId.get(n.parent_id)?.chapters.push(c);
+    } else if (n.level === "topic") {
+      const r = stats.get(n.id) || {};
+      const t = {
+        id: n.id,
+        name: n.name,
+        chapter: n.chapter,
+        subject: n.subject,
+        available: topicAvail.get(n.id) || 0,
+        attempted: r.attempted || 0,
+        correct: r.correct || 0,
+        accuracy: pct(r.correct || 0, r.attempted || 0),
+        recent_accuracy: pct(r.recent_correct || 0, r.recent_attempted || 0),
+        last_practised: r.last_practised || null,
+      };
+      t.status = statusOf(t);
+      byId.get(n.parent_id)?.topics.push(t);
+      allTopics.push(t);
     }
-    const topics = s.chapters.flatMap((c) => c.topics);
+  }
+
+  // Progress for each chapter, cluster and subject
+  for (const s of subjects) {
+    for (const cl of s.clusters) {
+      for (const c of cl.chapters) {
+        c.counts = countStatuses(c.topics);
+        c.total = c.topics.length;
+        c.progress_pct = pct(c.counts.mastered, c.total) ?? 0;
+        c.status = c.total && c.counts.mastered === c.total ? "mastered"
+          : c.topics.some((t) => t.attempted) ? "in_progress" : "not_started";
+      }
+      const topics = cl.chapters.flatMap((c) => c.topics);
+      cl.counts = countStatuses(topics);
+      cl.total = topics.length;
+      cl.progress_pct = pct(cl.counts.mastered, cl.total) ?? 0;
+    }
+    const topics = s.clusters.flatMap((cl) => cl.chapters.flatMap((c) => c.topics));
     s.counts = countStatuses(topics);
     s.total = topics.length;
     s.progress_pct = pct(s.counts.mastered, s.total) ?? 0;
@@ -140,8 +161,10 @@ router.get("/", async (req, res) => {
   else if (going) next_up = { ...going, reason: `${going.recent_accuracy}% recently. Keep going to master it.` };
   else if (fresh) next_up = { ...fresh, reason: "You haven't started this topic yet." };
 
+  const overallCounts = countStatuses(allTopics);
   res.json({
-    overall: { total: allTopics.length, ...countStatuses(allTopics), progress_pct: pct(countStatuses(allTopics).mastered, allTopics.length) ?? 0 },
+    exam,
+    overall: { total: allTopics.length, ...overallCounts, progress_pct: pct(overallCounts.mastered, allTopics.length) ?? 0 },
     subjects,
     next_up,
     active_practice: await activePractice(me),
@@ -152,15 +175,16 @@ router.get("/", async (req, res) => {
 // POST /api/student/journey/practice  { topic_id }: build a private practice set and start it
 router.post("/practice", async (req, res) => {
   const me = req.user.id;
-  const topicId = Number(req.body.topic_id);
-  if (!Number.isInteger(topicId)) return res.status(400).json({ error: "Pick a topic" });
+  const nodeId = Number(req.body.node_id ?? req.body.topic_id);
+  if (!Number.isInteger(nodeId)) return res.status(400).json({ error: "Pick a chapter or topic" });
 
   // Only one practice session at a time: resume the open one
   const open = await activePractice(me);
   if (open) return res.json({ attempt_id: open.attempt_id, resumed: true });
 
-  const { rows: [topic] } = await pool.query("SELECT id, name FROM topics WHERE id = $1", [topicId]);
-  if (!topic) return res.status(404).json({ error: "Topic not found" });
+  const { rows: [topic] } = await pool.query("SELECT id, name, level FROM syllabus_nodes WHERE id = $1", [nodeId]);
+  if (!topic || !TAGGABLE.includes(topic.level)) return res.status(404).json({ error: "Chapter or topic not found" });
+  const ids = await subtreeIds(topic.id);
 
   // Unseen questions first, then ones never answered correctly, then the rest
   const { rows: picked } = await pool.query(
@@ -170,12 +194,13 @@ router.post("/practice", async (req, res) => {
        FROM attempt_answers aa JOIN attempts a ON a.id = aa.attempt_id
        WHERE a.student_id = $2 AND a.status = 'submitted' AND aa.question_id = q.id
      ) h ON true
-     WHERE q.topic_id = $1 AND NOT EXISTS (SELECT 1 FROM test_questions ctq JOIN tests ct ON ct.id = ctq.test_id WHERE ctq.question_id = q.id AND ct.is_contest AND ct.status = 'published' AND ct.ends_at > now())
+     WHERE EXISTS (SELECT 1 FROM question_nodes qn WHERE qn.question_id = q.id AND qn.node_id = ANY($1))
+       AND ${NOT_IN_LIVE_CONTEST}
      ORDER BY (h.seen > 0), h.ever_correct, random()
      LIMIT $3`,
-    [topicId, me, RULES.practiceSize]
+    [ids, me, RULES.practiceSize]
   );
-  if (!picked.length) return res.status(400).json({ error: "This topic has no questions yet" });
+  if (!picked.length) return res.status(400).json({ error: `${topic.name} has no questions yet` });
 
   const duration = Math.min(360, Math.max(5, picked.length * RULES.minutesPerQuestion));
   const client = await pool.connect();

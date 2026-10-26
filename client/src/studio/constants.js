@@ -25,3 +25,15 @@ export const SERIES_EXAM_LABEL = {
   jee_main: "JEE Main",
   jee_advanced: "JEE Advanced",
 };
+
+// The two syllabus trees
+export const SYLLABUS_EXAMS = ["jee_main", "jee_advanced"];
+export const SYLLABUS_LABEL = { jee_main: "JEE Main", jee_advanced: "JEE Advanced" };
+export const SYLLABUS_SHORT = { jee_main: "Main", jee_advanced: "Adv" };
+export const LEVELS = ["subject", "cluster", "chapter", "topic", "subtopic", "section"];
+export const LEVEL_LABEL = {
+  subject: "Subject", cluster: "Cluster", chapter: "Chapter",
+  topic: "Topic", subtopic: "Subtopic", section: "Section",
+};
+// Questions are tagged at chapter level or deeper
+export const TAGGABLE = ["chapter", "topic", "subtopic", "section"];

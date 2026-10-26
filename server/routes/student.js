@@ -6,6 +6,17 @@ const { awardPoints } = require("../lib/points");
 const router = express.Router();
 router.use(requireAuth, requireRole("student"));
 
+// Subject / chapter / topic names for a question, preferring its tag in the test's own exam tree
+const PREFERRED_TAG = (examExpr) => `
+  COALESCE(CASE WHEN ${examExpr} = 'jee_advanced' THEN qt.adv_subject ELSE qt.main_subject END,
+           qt.main_subject, qt.adv_subject, 'Untagged') AS subject,
+  COALESCE(CASE WHEN ${examExpr} = 'jee_advanced' THEN qt.adv_chapter ELSE qt.main_chapter END,
+           qt.main_chapter, qt.adv_chapter, '—') AS chapter,
+  COALESCE(CASE WHEN ${examExpr} = 'jee_advanced' THEN qt.adv_topic ELSE qt.main_topic END,
+           qt.main_topic, qt.adv_topic,
+           CASE WHEN ${examExpr} = 'jee_advanced' THEN qt.adv_chapter ELSE qt.main_chapter END,
+           qt.main_chapter, qt.adv_chapter, '—') AS topic`;
+
 const GRACE_MS = 30 * 1000; // allow answers that were in flight when time ran out
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -197,12 +208,11 @@ router.get("/attempts/:id", async (req, res) => {
     const { rows: questions } = await pool.query(
       `SELECT q.id, q.type, q.text, q.image_url, q.options, tq.position,
               tq.marks_correct::float8 AS marks_correct, tq.marks_wrong::float8 AS marks_wrong,
-              s.name AS subject
+              ${PREFERRED_TAG("t.exam")}
        FROM test_questions tq
+       JOIN tests t ON t.id = tq.test_id
        JOIN questions q ON q.id = tq.question_id
-       JOIN topics tp ON tp.id = q.topic_id
-       JOIN chapters c ON c.id = tp.chapter_id
-       JOIN subjects s ON s.id = c.subject_id
+       LEFT JOIN question_tags qt ON qt.question_id = q.id
        WHERE tq.test_id = $1
        ORDER BY tq.position`,
       [a.test_id]
@@ -226,14 +236,13 @@ router.get("/attempts/:id", async (req, res) => {
   const { rows: questions } = await pool.query(
     `SELECT q.id, q.type, q.text, q.image_url, q.options, q.answer, q.solution, tq.position,
             tq.marks_correct::float8 AS marks_correct, tq.marks_wrong::float8 AS marks_wrong,
-            s.name AS subject, c.name AS chapter, tp.name AS topic,
+            ${PREFERRED_TAG("t.exam")},
             aa.response, aa.is_correct, aa.marks_awarded::float8 AS marks_awarded,
             COALESCE(aa.time_spent_seconds, 0) AS time_spent_seconds
      FROM test_questions tq
+     JOIN tests t ON t.id = tq.test_id
      JOIN questions q ON q.id = tq.question_id
-     JOIN topics tp ON tp.id = q.topic_id
-     JOIN chapters c ON c.id = tp.chapter_id
-     JOIN subjects s ON s.id = c.subject_id
+     LEFT JOIN question_tags qt ON qt.question_id = q.id
      LEFT JOIN attempt_answers aa ON aa.attempt_id = $1 AND aa.question_id = q.id
      WHERE tq.test_id = $2
      ORDER BY tq.position`,
