@@ -8,6 +8,16 @@ export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+  // Why the last session ended (e.g. password changed on another device)
+  // (kept for a minute, because the page may load twice on the way here)
+  const [notice] = useState(() => {
+    try {
+      const n = JSON.parse(sessionStorage.getItem("authNotice") || "null");
+      return n && Date.now() - n.at < 60000 ? n.msg : null;
+    } catch {
+      return null;
+    }
+  });
   const [busy, setBusy] = useState(false);
 
   if (user) return <Navigate to="/studio" replace />;
@@ -20,6 +30,7 @@ export default function Login() {
     setBusy(true);
     try {
       await login(form.email, form.password);
+      try { sessionStorage.removeItem("authNotice"); } catch { /* storage unavailable */ }
       navigate("/studio");
     } catch (err) {
       setError(err.response?.data?.error || "Login failed");
@@ -41,6 +52,7 @@ export default function Login() {
           Password
           <input name="password" type="password" value={form.password} onChange={update} required />
         </label>
+        {notice && !error && <p className="note">{notice}</p>}
         {error && <p className="error">{error}</p>}
         <button disabled={busy}>{busy ? "Logging in…" : "Log in"}</button>
         <p className="muted">

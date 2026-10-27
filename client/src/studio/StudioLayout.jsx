@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import Logo from "../components/Logo";
 
@@ -17,7 +17,9 @@ export default function StudioLayout({ items, children }) {
         <input className="search" placeholder="Search chapters, tests, questions…" />
         <div className="user-chip">
           <span className="role-badge">{ROLE_LABEL[user.role]}</span>
-          <span className="avatar" title={user.name}>{initials}</span>
+          <Link to="/studio/settings" className="avatar-link" title="Account settings">
+            {user.photo_url ? <img className="avatar photo" src={user.photo_url} alt={user.name} /> : <span className="avatar">{initials}</span>}
+          </Link>
           <button className="ghost" onClick={logout}>Log out</button>
         </div>
       </header>

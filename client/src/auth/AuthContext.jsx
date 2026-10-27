@@ -5,14 +5,12 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Only wait for the server when there is a saved token to check
+  const [loading, setLoading] = useState(() => !!localStorage.getItem("token"));
 
   // On page load, if a token exists, ask the server who we are
   useEffect(() => {
-    if (!localStorage.getItem("token")) {
-      setLoading(false);
-      return;
-    }
+    if (!localStorage.getItem("token")) return;
     api
       .get("/auth/me")
       .then((res) => setUser(res.data.user))
@@ -24,6 +22,8 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/login", { email, password });
     localStorage.setItem("token", data.token);
     setUser(data.user);
+    // Pick up extras such as the profile photo
+    api.get("/auth/me").then((r) => setUser(r.data.user)).catch(() => {});
     return data.user;
   }
 
