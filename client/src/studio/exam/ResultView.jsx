@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import api from "../../api";
 import { TYPE_LABEL } from "../constants";
 import MathText from "../components/MathText";
 import PointsEarned from "./PointsEarned";
@@ -18,6 +19,22 @@ const outcome = (q) => (q.is_correct === true ? "correct" : q.is_correct === fal
 export default function ResultView({ data }) {
   const { attempt, questions } = data;
   const [filter, setFilter] = useState("all");
+  const [marks, setMarks] = useState(() => Object.fromEntries(questions.map((q) => [q.id, !!q.bookmarked])));
+  const [flash, setFlash] = useState("");
+
+  async function toggleBookmark(id) {
+    const next = !marks[id];
+    setMarks((m) => ({ ...m, [id]: next }));
+    try {
+      if (next) await api.post(`/student/notebook/bookmarks/${id}`);
+      else await api.delete(`/student/notebook/bookmarks/${id}`);
+      setFlash(next ? "★ Saved to your notebook" : "Bookmark removed");
+    } catch {
+      setMarks((m) => ({ ...m, [id]: !next }));
+      setFlash("Couldn't update the bookmark");
+    }
+    setTimeout(() => setFlash(""), 2000);
+  }
 
   const attempted = attempt.correct_count + attempt.wrong_count;
   const accuracy = attempted ? Math.round((attempt.correct_count / attempted) * 100) : 0;
@@ -81,7 +98,10 @@ export default function ResultView({ data }) {
       </div>
 
       <div className="page-head">
-        <h3 style={{ margin: 0 }}>Review answers</h3>
+        <div>
+          <h3 style={{ margin: 0 }}>Review answers</h3>
+          {attempt.wrong_count > 0 && <Link to="/studio/notebook" className="db-more">Wrong answers are saved to your Notebook →</Link>}
+        </div>
         <div className="seg">
           {[["all", "All"], ["correct", "Correct"], ["wrong", "Wrong"], ["skipped", "Skipped"]].map(([v, l]) => (
             <button key={v} className={filter === v ? "seg-btn active" : "seg-btn"} onClick={() => setFilter(v)}>{l}</button>
@@ -98,6 +118,10 @@ export default function ResultView({ data }) {
               <div className="exam-q-head">
                 <b>Q{q.position}. {o === "correct" ? "✅ Correct" : o === "wrong" ? "❌ Wrong" : "➖ Skipped"}</b>
                 <div className="q-tags">
+                  <button type="button" className={`nb-star small ${marks[q.id] ? "on" : ""}`} onClick={() => toggleBookmark(q.id)}
+                    aria-label={marks[q.id] ? "Remove bookmark" : "Bookmark this question"} title={marks[q.id] ? "Remove bookmark" : "Bookmark"}>
+                    {marks[q.id] ? "★" : "☆"}
+                  </button>
                   <span className="tag">{q.subject} › {q.topic}</span>
                   <span className="tag">{TYPE_LABEL[q.type]}</span>
                   <span className="tag">{q.marks_awarded > 0 ? "+" : ""}{q.marks_awarded ?? 0} marks</span>
@@ -137,6 +161,7 @@ export default function ResultView({ data }) {
           );
         })}
       </div>
+      {flash && <div className="st-toast">{flash}</div>}
     </div>
   );
 }

@@ -15,6 +15,9 @@ app.use("/api/questions", require("./routes/questions"));
 app.use("/api/tests", require("./routes/tests"));
 app.use("/api/student/analytics", require("./routes/analytics"));
 app.use("/api/student/progress", require("./routes/progress"));
+app.use("/api/student/prediction", require("./routes/prediction"));
+app.use("/api/student/goals", require("./routes/goals"));
+app.use("/api/student/notebook", require("./routes/notebook"));
 app.use("/api/uploads", require("./routes/uploads"));
 app.use("/api/files", express.static(require("path").join(__dirname, "uploads"), {
   maxAge: "30d", immutable: true, index: false,

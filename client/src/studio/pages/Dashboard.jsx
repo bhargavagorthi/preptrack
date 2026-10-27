@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../../api";
 import { useAuth } from "../../auth/AuthContext";
 import { Ring, CountUp, FxButton } from "../components/Fx";
+import Prediction from "../components/Prediction";
+import { NewBadges } from "./Goals";
 import { until, when } from "../components/fxUtils";
 
 const CONTENT = {
@@ -31,6 +33,7 @@ const QUICK = [
   { to: "/studio/tests", icon: "📝", title: "Tests", text: "Practice tests and contests" },
   { to: "/studio/series", icon: "📚", title: "Test Series", text: "Free structured series" },
   { to: "/studio/analytics", icon: "📈", title: "Analytics", text: "Strengths and focus areas" },
+  { to: "/studio/notebook", icon: "📒", title: "Notebook", text: "Revise your mistakes" },
   { to: "/studio/leaderboard", icon: "🏆", title: "Leaderboard", text: "See where you stand" },
 ];
 
@@ -115,6 +118,8 @@ function StudentDashboard({ user }) {
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [profile, setProfile] = useState(null);
+  const [goals, setGoals] = useState(null);
+  const [newBadges, setNewBadges] = useState([]);
   const [params, setParams] = useSearchParams();
   const profileDone = params.get("profile") === "done";
 
@@ -124,6 +129,10 @@ function StudentDashboard({ user }) {
     api.get("/student/journey").then((r) => setJourney(r.data)).catch(() => {});
     api.get("/student/tests").then((r) => setTests(r.data.tests)).catch(() => setTests([]));
     api.get("/profile").then((r) => setProfile(r.data)).catch(() => {});
+    api.get("/student/goals").then((r) => {
+      setGoals(r.data);
+      setNewBadges(r.data.badges.filter((b) => b.earned && !b.seen));
+    }).catch(() => {});
     const t = setInterval(() => setNow(Date.now()), 30000);
     return () => clearInterval(t);
   }, []);
@@ -231,6 +240,31 @@ function StudentDashboard({ user }) {
         </div>
       )}
 
+      {/* ---------- Predicted result + today's goal ---------- */}
+      <div className="db-cols db-standing">
+        <Prediction compact />
+        {goals && (
+          <Link to="/studio/goals" className={`db-goal ${goals.progress.today.met ? "met" : ""}`}>
+            <Ring pct={Math.min(100, (goals.progress.today.questions / goals.progress.today.goal) * 100)} size={84} stroke={8}
+              color={goals.progress.today.met ? "#1f9d63" : "#2563eb"}>
+              <strong style={{ fontSize: 20 }}>{goals.progress.today.questions}</strong><small>/ {goals.progress.today.goal}</small>
+            </Ring>
+            <div className="db-goal-text">
+              <span className="db-eyebrow">🎯 Today's goal</span>
+              <b>{goals.progress.today.met ? "Done for today ✅" : `${goals.progress.today.goal - goals.progress.today.questions} questions to go`}</b>
+              <small>
+                {goals.progress.week.tests}/{goals.progress.week.goal} tests this week
+                {goals.progress.goal_streak > 0 && <> · 🔥 {goals.progress.goal_streak}-day goal streak</>}
+              </small>
+              <div className="db-goal-badges">
+                {goals.badges.filter((b) => b.earned).slice(-5).map((b) => <span key={b.id} title={b.name}>{b.icon}</span>)}
+                <em>{goals.badges.filter((b) => b.earned).length}/{goals.badges.length} badges →</em>
+              </div>
+            </div>
+          </Link>
+        )}
+      </div>
+
       {/* ---------- Stats ---------- */}
       <div className="db-stats">
         <StatTile icon="📝" label="Tests taken" value={o ? o.tests_taken : "…"} index={0} color={TILE_COLORS[0]} />
@@ -325,6 +359,7 @@ function StudentDashboard({ user }) {
       </div>
 
       {prog && <HowToEarn rules={prog.rules} />}
+      <NewBadges badges={newBadges} onClose={() => { setNewBadges([]); api.post("/student/goals/badges/seen").catch(() => {}); }} />
     </div>
   );
 }

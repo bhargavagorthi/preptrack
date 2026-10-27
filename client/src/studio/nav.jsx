@@ -11,6 +11,8 @@ import Tests from "./pages/Tests";
 import StudentTests from "./pages/StudentTests";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import Goals from "./pages/Goals";
+import Notebook from "./pages/Notebook";
 
 const soon = (title, text) => <ComingSoon title={title} text={text} />;
 const home = { path: "", label: "Dashboard", icon: "🏠", element: <Dashboard /> };
@@ -24,6 +26,8 @@ export const NAV = {
     { path: "tests", label: "Tests", icon: "📝", element: <StudentTests /> },
     { path: "series", label: "Test Series", icon: "📚", element: <StudentSeries /> },
     { path: "analytics", label: "Analytics", icon: "📈", element: <Analytics /> },
+    { path: "notebook", label: "Notebook", icon: "📒", element: <Notebook /> },
+    { path: "goals", label: "Goals & badges", icon: "🎯", element: <Goals /> },
     { path: "leaderboard", label: "Leaderboard", icon: "🏆", element: <Leaderboard /> },
     settings,
   ],

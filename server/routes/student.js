@@ -238,7 +238,8 @@ router.get("/attempts/:id", async (req, res) => {
             tq.marks_correct::float8 AS marks_correct, tq.marks_wrong::float8 AS marks_wrong,
             ${PREFERRED_TAG("t.exam")},
             aa.response, aa.is_correct, aa.marks_awarded::float8 AS marks_awarded,
-            COALESCE(aa.time_spent_seconds, 0) AS time_spent_seconds
+            COALESCE(aa.time_spent_seconds, 0) AS time_spent_seconds,
+            EXISTS (SELECT 1 FROM question_bookmarks b WHERE b.user_id = $3 AND b.question_id = q.id) AS bookmarked
      FROM test_questions tq
      JOIN tests t ON t.id = tq.test_id
      JOIN questions q ON q.id = tq.question_id
@@ -246,7 +247,7 @@ router.get("/attempts/:id", async (req, res) => {
      LEFT JOIN attempt_answers aa ON aa.attempt_id = $1 AND aa.question_id = q.id
      WHERE tq.test_id = $2
      ORDER BY tq.position`,
-    [a.id, a.test_id]
+    [a.id, a.test_id, req.user.id]
   );
   res.json({ attempt: meta, questions });
 });

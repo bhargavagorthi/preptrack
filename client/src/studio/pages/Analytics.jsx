@@ -9,6 +9,7 @@ import ExamSwitch from "../syllabus/ExamSwitch";
 import { useAuth } from "../../auth/AuthContext";
 import { Ring, CountUp } from "../components/Fx";
 import SubjectCompare from "../components/SubjectCompare";
+import Prediction from "../components/Prediction";
 import { SUBJECT_COLORS } from "../components/fxUtils";
 
 const fmtTime = (s) => (s == null ? "—" : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
@@ -117,6 +118,9 @@ export default function Analytics() {
         </div>
         <ExamSwitch value={exam} onChange={setExam} />
       </div>
+
+      {/* ---------- Predicted JEE Main ---------- */}
+      <Prediction />
 
       {/* ---------- Headline rings ---------- */}
       <div className="an-hero">

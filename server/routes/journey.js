@@ -2,6 +2,7 @@ const express = require("express");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { EXAMS, TAGGABLE, loadTree, subtreeIds } = require("../lib/syllabus");
+const { PRACTICE, activePractice, NOT_IN_LIVE_CONTEST, createPractice } = require("../lib/practice");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("student"));
@@ -13,8 +14,6 @@ const RULES = {
   masteredAccuracy: 80,
   needsWorkMinAttempted: 3,
   needsWorkAccuracy: 50,
-  practiceSize: 10,          // questions per practice set
-  minutesPerQuestion: 2,
 };
 
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
@@ -29,21 +28,6 @@ function statusOf(t) {
 const countStatuses = (topics) =>
   topics.reduce((acc, t) => ({ ...acc, [t.status]: (acc[t.status] || 0) + 1 }),
     { mastered: 0, practising: 0, needs_work: 0, not_started: 0 });
-
-async function activePractice(studentId) {
-  const { rows: [p] } = await pool.query(
-    `SELECT a.id AS attempt_id, t.title FROM attempts a JOIN tests t ON t.id = a.test_id
-     WHERE a.student_id = $1 AND a.status = 'in_progress' AND t.kind = 'practice' AND a.deadline > now()
-     ORDER BY a.started_at DESC LIMIT 1`,
-    [studentId]
-  );
-  return p || null;
-}
-
-// Questions in an upcoming or live contest can't be practised
-const NOT_IN_LIVE_CONTEST = `NOT EXISTS (
-  SELECT 1 FROM test_questions ctq JOIN tests ct ON ct.id = ctq.test_id
-  WHERE ctq.question_id = q.id AND ct.is_contest AND ct.status = 'published' AND ct.ends_at > now())`;
 
 // GET /api/student/journey?exam=: the chosen syllabus tree with this student's status on every topic
 router.get("/", async (req, res) => {
@@ -198,40 +182,12 @@ router.post("/practice", async (req, res) => {
        AND ${NOT_IN_LIVE_CONTEST}
      ORDER BY (h.seen > 0), h.ever_correct, random()
      LIMIT $3`,
-    [ids, me, RULES.practiceSize]
+    [ids, me, PRACTICE.size]
   );
   if (!picked.length) return res.status(400).json({ error: `${topic.name} has no questions yet` });
 
-  const duration = Math.min(360, Math.max(5, picked.length * RULES.minutesPerQuestion));
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows: [test] } = await client.query(
-      `INSERT INTO tests (title, exam, duration_minutes, status, kind, owner_id, organization_id, created_by, published_at)
-       VALUES ($1, 'practice', $2, 'published', 'practice', $3, (SELECT organization_id FROM users WHERE id = $3), $3, now())
-       RETURNING id`,
-      [`Practice: ${topic.name}`, duration, me]
-    );
-    await client.query(
-      `INSERT INTO test_questions (test_id, question_id, position, marks_correct, marks_wrong)
-       SELECT $1, q.id, x.pos, q.marks_correct, q.marks_wrong
-       FROM unnest($2::int[]) WITH ORDINALITY AS x(id, pos)
-       JOIN questions q ON q.id = x.id`,
-      [test.id, picked.map((p) => p.id)]
-    );
-    const { rows: [attempt] } = await client.query(
-      `INSERT INTO attempts (test_id, student_id, deadline)
-       VALUES ($1, $2, now() + make_interval(mins => $3)) RETURNING id`,
-      [test.id, me, duration]
-    );
-    await client.query("COMMIT");
-    res.status(201).json({ attempt_id: attempt.id, resumed: false });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
+  const attemptId = await createPractice(me, `Practice: ${topic.name}`, picked.map((p) => p.id));
+  res.status(201).json({ attempt_id: attemptId, resumed: false });
 });
 
 module.exports = router;
