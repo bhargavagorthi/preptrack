@@ -1661,3 +1661,47 @@ img.avatar.photo { object-fit: cover; padding: 0; }
 .st-req { color: #e05656; font-weight: 900; }
 .st-consent { margin-top: 4px; font-size: 12px !important; color: #64748b; }
 .st-consent.on { color: #1f7a45 !important; font-weight: 600; }
+
+/* ================= Analytics: compare subjects ================= */
+.sc { display: grid; gap: 14px; animation: jr-in .5s .2s ease both; }
+.sc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.sc-head h3 { margin: 0 0 2px; }
+.sc-style, .sc-modes, .sc-metrics { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; background: #f1f5f9; }
+.sc-style button, .sc-modes button, .sc-metrics button { background: transparent; color: #475569; padding: 6px 12px; border-radius: 9px; font-size: 13px; font-weight: 700; transition: background .2s, color .2s, box-shadow .2s, transform .15s; }
+.sc-style button:hover, .sc-modes button:hover, .sc-metrics button:hover { background: #e2e8f0; color: var(--text); }
+.sc-style button:active, .sc-modes button:active, .sc-metrics button:active { transform: scale(0.96); }
+.sc-style button.active, .sc-modes button.active, .sc-metrics button.active { background: #fff; color: var(--accent-dark); box-shadow: 0 2px 8px -3px rgba(15, 23, 42, 0.25); }
+.sc-modes > span { font-size: 12px; font-weight: 800; color: var(--muted); padding: 0 6px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+.sc-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.sc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sc-chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 8px; border-radius: 999px; font-size: 13.5px; font-weight: 700;
+  background: #fff; color: #475569; border: 2px solid #e2e8f0; transition: border-color .2s, background .2s, color .2s, transform .15s, box-shadow .2s;
+}
+.sc-chip:hover { background: #fff; border-color: color-mix(in srgb, var(--c) 50%, #e2e8f0); color: var(--text); }
+.sc-chip:active { transform: scale(0.95); }
+.sc-chip.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, #fff); color: color-mix(in srgb, var(--c) 75%, #0f172a); box-shadow: 0 6px 16px -10px var(--c); }
+.sc-chip-dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-content: center; font-size: 11px; color: #fff; border: 2px solid var(--c); background: #fff; transition: background .2s, transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.sc-chip.on .sc-chip-dot { background: var(--c); transform: scale(1.1); }
+.sc-headline { margin: 0; padding: 10px 14px; border-radius: 12px; background: #f8fafc; border: 1px solid #eef2f7; font-size: 14px; color: #334155; animation: jr-in .35s ease both; }
+.sc-chart { animation: jr-view .3s ease both; }
+.sc-tip { background: #0f172a; color: #fff; padding: 10px 12px; border-radius: 12px; font-size: 13px; display: grid; gap: 5px; min-width: 190px; box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.45); }
+.sc-tip > b { font-size: 13px; opacity: 0.9; margin-bottom: 2px; }
+.sc-tip-row { display: flex; align-items: center; gap: 8px; }
+.sc-tip-row i { width: 10px; height: 10px; border-radius: 3px; }
+.sc-tip-row span { flex: 1; }
+.sc-tip-row em { font-style: normal; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; background: rgba(255, 255, 255, 0.16); padding: 1px 6px; border-radius: 999px; }
+.sc-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.sc-sub { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid var(--border); border-top: 4px solid var(--c); animation: jr-in .4s ease both; animation-delay: calc(var(--i) * 70ms); }
+.sc-sub-head { display: flex; gap: 6px; align-items: center; color: color-mix(in srgb, var(--c) 75%, #0f172a); }
+.sc-sub-main { display: flex; align-items: baseline; gap: 10px; }
+.sc-sub-main strong { font-size: 26px; }
+.sc-sub small { color: var(--muted); font-size: 12px; }
+.sc-delta { font-size: 12.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.sc-delta.up { background: #e7f7ee; color: #1f7a45; }
+.sc-delta.down { background: #fdeaea; color: #b42323; }
+@media (max-width: 600px) {
+  .sc-controls { gap: 8px; }
+  .sc-metrics { width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .sc-metrics button { flex: none; }
+}

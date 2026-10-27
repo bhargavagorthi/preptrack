@@ -8,6 +8,7 @@ import { TYPE_LABEL, SYLLABUS_LABEL } from "../constants";
 import ExamSwitch from "../syllabus/ExamSwitch";
 import { useAuth } from "../../auth/AuthContext";
 import { Ring, CountUp } from "../components/Fx";
+import SubjectCompare from "../components/SubjectCompare";
 import { SUBJECT_COLORS } from "../components/fxUtils";
 
 const fmtTime = (s) => (s == null ? "—" : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
@@ -178,6 +179,9 @@ export default function Analytics() {
           </AreaChart>
         </ResponsiveContainer>
       </div>
+
+      {/* ---------- Subjects side by side ---------- */}
+      {data.subject_trend && <SubjectCompare data={data.subject_trend} />}
 
       {/* ---------- Insights ---------- */}
       <div className="an-insights">

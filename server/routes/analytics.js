@@ -68,7 +68,7 @@ router.get("/", async (req, res) => {
   );
   for (const e of expired) await finalize(e.id, true);
 
-  const [testsQ, topicsQ, overallQ, byDifficulty, byType] = await Promise.all([
+  const [testsQ, topicsQ, overallQ, byDifficulty, byType, subjectTestsQ] = await Promise.all([
     pool.query(
       `SELECT a.id AS attempt_id, t.title, t.exam, a.submitted_at,
               a.score::float8 AS score, a.max_score::float8 AS max_score,
@@ -90,6 +90,15 @@ router.get("/", async (req, res) => {
     pool.query(`SELECT ${METRICS} ${BASE}`, [me]),
     breakdown(me, "difficulty", ["easy", "medium", "hard"]),
     breakdown(me, "type", ["single", "multiple", "numerical"]),
+    // Each test split by subject (in this syllabus), for the subject comparison chart
+    pool.query(
+      `SELECT a.id AS attempt_id, np.subject_id, np.subject, MIN(np.sort_key) AS subject_order, ${METRICS},
+              COALESCE(SUM(tq.marks_correct), 0)::float8 AS max_marks
+       ${TREE_BASE}
+       LEFT JOIN test_questions tq ON tq.test_id = a.test_id AND tq.question_id = aa.question_id
+       GROUP BY a.id, np.subject_id, np.subject`,
+      [me, exam]
+    ),
   ]);
 
   // Build subject → chapter → topic, totalling as we go
@@ -130,6 +139,32 @@ router.get("/", async (req, res) => {
   }));
   const scored = trend.filter((t) => t.score_pct != null).map((t) => t.score_pct);
 
+  // Subject comparison: one point per test, with each subject's numbers (null when a test had none of it)
+  const subjectOrder = new Map();
+  const perAttempt = new Map();
+  for (const r of subjectTestsQ.rows) {
+    // sort_key starts with the subject's [position, id], so that orders subjects as in the syllabus
+    if (!subjectOrder.has(r.subject_id))
+      subjectOrder.set(r.subject_id, { id: r.subject_id, name: r.subject, order: r.subject_order.slice(0, 2).map(Number) });
+    const m = finish(add(blank(), r));
+    if (!perAttempt.has(r.attempt_id)) perAttempt.set(r.attempt_id, {});
+    perAttempt.get(r.attempt_id)[r.subject_id] = {
+      accuracy: m.accuracy,
+      score_pct: r.max_marks ? pct(m.marks, r.max_marks) : null,
+      marks: m.marks,
+      max_marks: r2(r.max_marks),
+      attempted: m.attempted,
+      seen: m.seen,
+      avg_time: m.avg_time,
+    };
+  }
+  const subjectTrend = {
+    subjects: [...subjectOrder.values()].sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]).map(({ id, name }) => ({ id, name })),
+    points: testsQ.rows
+      .map((t, i) => ({ label: `T${i + 1}`, title: t.title, date: t.submitted_at, by_subject: perAttempt.get(t.attempt_id) || {} }))
+      .filter((pt) => Object.keys(pt.by_subject).length),
+  };
+
   const eligible = topics.filter((t) => t.attempted >= MIN_ATTEMPTED);
   const insights = {
     min_attempted: MIN_ATTEMPTED,
@@ -157,6 +192,7 @@ router.get("/", async (req, res) => {
       negative: overall.negative,
     },
     trend,
+    subject_trend: subjectTrend,
     subjects: subjectsOut,
     by_difficulty: byDifficulty,
     by_type: byType,
