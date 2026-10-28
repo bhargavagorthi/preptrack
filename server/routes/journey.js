@@ -3,6 +3,7 @@ const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { EXAMS, TAGGABLE, loadTree, subtreeIds } = require("../lib/syllabus");
 const { PRACTICE, activePractice, NOT_IN_LIVE_CONTEST, createPractice } = require("../lib/practice");
+const { PROGRESSION, applyProgression } = require("../lib/progression");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("student"));
@@ -35,7 +36,7 @@ router.get("/", async (req, res) => {
   const { rows: [u] } = await pool.query("SELECT target_exam FROM users WHERE id = $1", [me]);
   const exam = EXAMS.includes(req.query.exam) ? req.query.exam : u.target_exam;
 
-  const [nodes, statsQ, availQ] = await Promise.all([
+  const [nodes, statsQ, availQ, unlocksQ] = await Promise.all([
     loadTree(exam),
     // A topic's status uses answers to questions tagged to it or anything beneath it
     pool.query(
@@ -66,6 +67,7 @@ router.get("/", async (req, res) => {
        GROUP BY np.chapter_id, np.topic_id`,
       [exam]
     ),
+    pool.query("SELECT node_id FROM journey_unlocks WHERE user_id = $1", [me]),
   ]);
 
   const stats = new Map(statsQ.rows.map((r) => [r.topic_id, r]));
@@ -134,6 +136,9 @@ router.get("/", async (req, res) => {
     s.progress_pct = pct(s.counts.mastered, s.total) ?? 0;
   }
 
+  // Stars, locks and "you are here"
+  applyProgression(subjects, new Set(unlocksQ.rows.map((r) => r.node_id)));
+
   // What should the student practise next?
   const practicable = allTopics.filter((t) => t.available > 0);
   const byRecent = (a, b) => a.recent_accuracy - b.recent_accuracy;
@@ -152,8 +157,27 @@ router.get("/", async (req, res) => {
     subjects,
     next_up,
     active_practice: await activePractice(me),
-    rules: RULES,
+    rules: { ...RULES, ...PROGRESSION },
   });
+});
+
+// POST /api/student/journey/unlock  { node_id }: open a world, chapter or topic early ("jump in anyway")
+router.post("/unlock", async (req, res) => {
+  const nodeId = Number(req.body?.node_id);
+  if (!Number.isInteger(nodeId)) return res.status(400).json({ error: "Pick a level to unlock" });
+  const { rows: [n] } = await pool.query("SELECT id, level FROM syllabus_nodes WHERE id = $1", [nodeId]);
+  if (!n || !["cluster", "chapter", "topic"].includes(n.level)) return res.status(404).json({ error: "Level not found" });
+  // Opening a chapter or topic also opens what contains it
+  const { rows: [p] } = await pool.query("SELECT ids FROM node_paths WHERE id = $1", [nodeId]);
+  const { rows: chain } = await pool.query(
+    "SELECT id FROM syllabus_nodes WHERE id = ANY($1) AND level IN ('cluster', 'chapter', 'topic')",
+    [p.ids]
+  );
+  await pool.query(
+    "INSERT INTO journey_unlocks (user_id, node_id) SELECT $1, unnest($2::int[]) ON CONFLICT DO NOTHING",
+    [req.user.id, chain.map((c) => c.id)]
+  );
+  res.json({ unlocked: chain.map((c) => c.id) });
 });
 
 // POST /api/student/journey/practice  { topic_id }: build a private practice set and start it
