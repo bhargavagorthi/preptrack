@@ -84,15 +84,48 @@ function shapeTags(row) {
   return { ...rest, tags: { jee_main: main, jee_advanced: adv }, ...primary };
 }
 
-// GET /api/questions?exam=&node_id=&untagged=1&type=&difficulty=&search=&page=
-router.get("/", async (req, res) => {
+// Filters shared by the list and the per-node counts. Returns { where: [...], params: [...] }.
+// mine=1 → only my questions · since=today|7d|30d → added recently · type, difficulty, search
+const SINCE = { today: "date_trunc('day', now())", "7d": "now() - interval '7 days'", "30d": "now() - interval '30 days'" };
+function baseFilters(query, user) {
   const where = [];
   const params = [];
   const add = (sql, value) => {
     params.push(value);
     where.push(sql.replaceAll("?", `$${params.length}`));
   };
-  const { exam, node_id, untagged, type, difficulty, search } = req.query;
+  const { type, difficulty, search, mine, since } = query;
+  if (mine === "1") add("q.created_by = ?", user.id);
+  if (SINCE[since]) where.push(`q.created_at >= ${SINCE[since]}`);
+  if (TYPES.includes(type)) add("q.type = ?", type);
+  if (DIFFICULTIES.includes(difficulty)) add("q.difficulty = ?", difficulty);
+  if (search) {
+    // "#12" or "12" finds a question by its number too
+    const id = /^#?\d+$/.test(search.trim()) ? Number(search.trim().replace("#", "")) : null;
+    if (id) {
+      params.push(id, `%${search}%`);
+      where.push(`(q.id = $${params.length - 1} OR q.text ILIKE $${params.length})`);
+    } else {
+      add("(q.text ILIKE ? OR q.solution ILIKE ?)", `%${search}%`);
+    }
+  }
+  return { where, params, add };
+}
+
+const SORTS = {
+  newest: "q.created_at DESC, q.id DESC",
+  oldest: "q.created_at ASC, q.id ASC",
+  updated: "q.updated_at DESC NULLS LAST, q.id DESC",
+};
+
+// A question in a published standard test can only be re-tagged, not edited
+const LOCKED_SQL = `EXISTS (SELECT 1 FROM test_questions tq JOIN tests t ON t.id = tq.test_id
+                            WHERE tq.question_id = q.id AND t.status = 'published' AND t.kind = 'standard')`;
+
+// GET /api/questions?exam=&node_id=&untagged=1&type=&difficulty=&search=&mine=1&since=&sort=&page=
+router.get("/", async (req, res) => {
+  const { where, params, add } = baseFilters(req.query, req.user);
+  const { exam, node_id, untagged } = req.query;
   if (untagged === "1") {
     where.push("NOT EXISTS (SELECT 1 FROM question_nodes qn WHERE qn.question_id = q.id)");
   } else if (node_id) {
@@ -101,21 +134,25 @@ router.get("/", async (req, res) => {
   } else if (EXAMS.includes(exam)) {
     add("EXISTS (SELECT 1 FROM question_nodes qn WHERE qn.question_id = q.id AND qn.exam = ?)", exam);
   }
-  if (type) add("q.type = ?", type);
-  if (difficulty) add("q.difficulty = ?", difficulty);
-  if (search) add("q.text ILIKE ?", `%${search}%`);
   const page = Math.max(1, Number(req.query.page) || 1);
+  const order = SORTS[req.query.sort] || SORTS.newest;
+  params.push(req.user.id, req.user.role === "admin");
+  const me = `$${params.length - 1}`;
+  const admin = `$${params.length}::boolean`;
 
   const { rows } = await pool.query(
     `SELECT q.id, q.type, q.text, q.image_url, q.options, q.answer, q.solution, q.difficulty,
             q.marks_correct::float8 AS marks_correct, q.marks_wrong::float8 AS marks_wrong,
-            q.created_by, q.created_at, u.name AS author, ${TAG_COLUMNS},
+            q.created_by, q.created_at, q.updated_at, u.name AS author, ${TAG_COLUMNS},
+            (q.created_by = ${me} OR ${admin}) AS can_edit,
+            ${LOCKED_SQL} AS locked,
+            (SELECT COUNT(*)::int FROM test_questions tq WHERE tq.question_id = q.id) AS used_in_tests,
             COUNT(*) OVER() AS total
      FROM questions q
      LEFT JOIN question_tags qt ON qt.question_id = q.id
      LEFT JOIN users u ON u.id = q.created_by
      ${where.length ? "WHERE " + where.join(" AND ") : ""}
-     ORDER BY q.created_at DESC, q.id DESC
+     ORDER BY ${order}
      LIMIT 50 OFFSET ${(page - 1) * 50}`,
     params
   );
@@ -129,6 +166,22 @@ router.get("/", async (req, res) => {
     untagged_total: counts.untagged,
     page,
   });
+});
+
+// GET /api/questions/coverage?exam=jee_main&(same filters): questions tagged directly to each node,
+// so the syllabus browser can show counts that follow the creator's filters
+router.get("/coverage", async (req, res) => {
+  if (!EXAMS.includes(req.query.exam)) return res.status(400).json({ error: "exam must be jee_main or jee_advanced" });
+  const { where, params, add } = baseFilters(req.query, req.user);
+  add("qn.exam = ?", req.query.exam);
+  const { rows } = await pool.query(
+    `SELECT qn.node_id, COUNT(*)::int AS n
+     FROM question_nodes qn JOIN questions q ON q.id = qn.question_id
+     WHERE ${where.join(" AND ")}
+     GROUP BY qn.node_id`,
+    params
+  );
+  res.json({ counts: Object.fromEntries(rows.map((r) => [r.node_id, r.n])) });
 });
 
 // POST /api/questions

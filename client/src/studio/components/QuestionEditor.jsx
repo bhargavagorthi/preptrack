@@ -30,7 +30,7 @@ export default function QuestionEditor({ question, onCancel, onSaved }) {
     solution: question.solution || "",
   }));
   const [error, setError] = useState("");
-  const [locked, setLocked] = useState(false); // question is in a published test: only tags can change
+  const [locked, setLocked] = useState(!!question.locked); // question is in a published test: only tags can change
   const [busy, setBusy] = useState(false);
   const setTag = (exam, nodeId) => setForm((f) => ({ ...f, tags: { ...f.tags, [exam]: nodeId } }));
 
@@ -117,7 +117,7 @@ export default function QuestionEditor({ question, onCancel, onSaved }) {
       {error && <p className="error">{error}</p>}
       {locked && (
         <p className="note locked-note">
-          You can still change where this question sits in the syllabus.
+          🔒 This question is in a published test, so its wording and answers are frozen. You can still change where it sits in the syllabus.
           <button type="button" className="small" onClick={saveTagsOnly} disabled={busy}>Save syllabus tags only</button>
         </p>
       )}
