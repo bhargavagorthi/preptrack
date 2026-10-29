@@ -2,6 +2,7 @@ const express = require("express");
 const pool = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { TAG_COLUMNS, shapeTags } = require("./questions");
+const autopick = require("../lib/autopick");
 
 const router = express.Router();
 router.use(requireAuth, requireRole("creator", "admin"));
@@ -84,6 +85,35 @@ router.post("/", async (req, res) => {
     [t.title, t.exam, t.duration_minutes, t.instructions, t.is_contest, t.starts_at, t.ends_at, req.user.id]
   );
   res.status(201).json({ id: rows[0].id });
+});
+
+// POST /api/tests/autopick/availability { exam, rows, exclude_ids, test_id }: how many questions
+// each row can draw on, by difficulty. Nothing is picked.
+router.post("/autopick/availability", async (req, res) => {
+  const { error, value } = autopick.validate({ ...req.body, rows: (req.body.rows || []).map((r) => ({ ...r, easy: 1, medium: 0, hard: 0 })) });
+  if (error) return res.status(400).json({ error });
+  res.json({ rows: await autopick.availability(value) });
+});
+
+// POST /api/tests/autopick { exam, rows: [{ node_ids, type, easy, medium, hard }], exclude_ids,
+//   test_id, spread, prefer_fresh, fill_short, order }: picks questions; nothing is saved,
+// so the creator can review, swap and then save the test as usual
+router.post("/autopick", async (req, res) => {
+  const { error, value } = autopick.validate(req.body);
+  if (error) return res.status(400).json({ error });
+  const rows = await autopick.pick(value);
+  const ids = rows.flatMap((r) => r.ids);
+  const { rows: qs } = ids.length
+    ? await pool.query(
+      `SELECT q.id, q.type, q.text, q.difficulty,
+              q.marks_correct::float8 AS marks_correct, q.marks_wrong::float8 AS marks_wrong, ${TAG_COLUMNS}
+       FROM questions q LEFT JOIN question_tags qt ON qt.question_id = q.id
+       WHERE q.id = ANY($1)`, [ids])
+    : { rows: [] };
+  const byId = new Map(qs.map((q) => [q.id, shapeTags(q)]));
+  res.json({
+    rows: rows.map(({ ids: rowIds, ...report }) => ({ ...report, questions: rowIds.map((id) => byId.get(id)) })),
+  });
 });
 
 // GET /api/tests/:id: the test and its questions in order

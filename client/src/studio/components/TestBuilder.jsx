@@ -4,6 +4,8 @@ import NodePicker from "../syllabus/NodePicker";
 import TagChips from "../syllabus/TagChips";
 import { TYPE_LABEL, EXAM_LABEL, SYLLABUS_EXAMS, SYLLABUS_LABEL } from "../constants";
 import MathText from "../components/MathText";
+import AutoPick from "./AutoPick";
+import { useSyllabus } from "../syllabus/useSyllabus";
 
 const EMPTY_FILTERS = { scope: "", node_id: null, type: "", difficulty: "", search: "" };
 const SUBJECT_ORDER = ["Physics", "Chemistry", "Mathematics"];
@@ -32,6 +34,9 @@ export default function TestBuilder({ testId, onBack }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState("auto"); // "auto" = build from the syllabus, "hand" = pick one by one
+  const [report, setReport] = useState(null);
+  const [swapping, setSwapping] = useState(null);
 
   const loadTest = useCallback(async () => {
     const { data } = await api.get(`/tests/${testId}`);
@@ -55,6 +60,7 @@ export default function TestBuilder({ testId, onBack }) {
 
   // Browse the question bank in the test's own syllabus by default
   const scope = filters.scope || (SYLLABUS_EXAMS.includes(test?.exam) ? test.exam : "jee_main");
+  const { tree: scopeTree } = useSyllabus(scope);
 
   useEffect(() => {
     if (!test) return;
@@ -73,11 +79,52 @@ export default function TestBuilder({ testId, onBack }) {
   const selectedIds = new Set(selected.map((q) => q.id));
   const totalMarks = selected.reduce((sum, q) => sum + Number(q.marks_correct), 0);
   const bySubject = selected.reduce((acc, q) => ({ ...acc, [q.subject]: (acc[q.subject] || 0) + 1 }), {});
+  const byDiff = selected.reduce((acc, q) => ({ ...acc, [q.difficulty]: (acc[q.difficulty] || 0) + 1 }), {});
 
-  const changeList = (list) => { setSelected(list); setDirty(true); setNotice(""); };
+  const changeList = (list) => { setSelected(list); setDirty(true); setNotice(""); setReport(null); };
   const changeMeta = (patch) => { setMeta((m) => ({ ...m, ...patch })); setDirty(true); setNotice(""); };
 
   const add = (q) => changeList([...selected, q]);
+
+  function applyPicked(questions, mode, rep) {
+    const base = mode === "replace" ? [] : selected;
+    changeList([...base, ...questions]);
+    setReport(rep);
+  }
+
+  // Swap one question for another of the same type and difficulty from the same place in the
+  // syllabus, widening to the topic and chapter if that spot has nothing else
+  async function swap(q, index) {
+    const exam = q.tags?.[scope] ? scope : SYLLABUS_EXAMS.find((e) => q.tags?.[e]);
+    const nodeId = q.tags?.[exam]?.node_id;
+    if (!nodeId) return setError("This question isn't tagged, so there's nothing to swap it with");
+    const tree = exam === scope ? scopeTree : null;
+    const ladder = tree
+      ? tree.chain(nodeId).filter((n) => ["chapter", "topic", "subtopic", "section"].includes(n.level)).map((n) => n.id).reverse()
+      : [nodeId];
+    setSwapping(q.id);
+    setError("");
+    try {
+      for (const id of ladder) {
+        const { data } = await api.post("/tests/autopick", {
+          exam, test_id: test.id, exclude_ids: selected.map((x) => x.id), fill_short: false, spread: false,
+          rows: [{ node_ids: [id], type: q.type, [q.difficulty]: 1 }],
+        });
+        const next = data.rows[0].questions[0];
+        if (next) {
+          const list = [...selected];
+          list[index] = next;
+          changeList(list);
+          return;
+        }
+      }
+      setNotice(`No other ${q.difficulty} ${TYPE_LABEL[q.type].toLowerCase()} question in this chapter yet.`);
+    } catch (e) {
+      setError(e.response?.data?.error || "Couldn't swap");
+    } finally {
+      setSwapping(null);
+    }
+  }
   const remove = (id) => changeList(selected.filter((q) => q.id !== id));
   function move(i, dir) {
     const j = i + dir;
@@ -210,9 +257,16 @@ export default function TestBuilder({ testId, onBack }) {
             <span className="pill">{selected.length} questions</span>
             <span className="pill">{totalMarks} marks</span>
             {Object.entries(bySubject).map(([s, n]) => <span key={s} className="pill soft">{s}: {n}</span>)}
+            {["easy", "medium", "hard"].map((d) => byDiff[d] ? <span key={d} className={`pill tag diff-${d}`}>{byDiff[d]} {d}</span> : null)}
           </div>
+          {report && (
+            <div className="ap-report">
+              <b>Picked {report.got} of {report.asked} questions.</b> Review them, swap any you don't like with ↻, then save.
+              {report.notes.length > 0 && <ul>{report.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+            </div>
+          )}
           {selected.length === 0 ? (
-            <p className="muted">Add questions from the bank on the right.</p>
+            <p className="muted">Use ⚡ Auto-pick on the right to fill the test from chapters and a difficulty mix, or add questions one by one.</p>
           ) : (
             <ol className="sel-list">
               {selected.map((q, i) => (
@@ -223,11 +277,13 @@ export default function TestBuilder({ testId, onBack }) {
                     <div className="q-tags">
                       <TagChips tags={q.tags} depth={2} />
                       <span className="tag">{TYPE_LABEL[q.type]}</span>
+                      {q.difficulty && <span className={`tag diff-${q.difficulty}`}>{q.difficulty}</span>}
                       <span className="tag">+{q.marks_correct} / {q.marks_wrong}</span>
                     </div>
                   </div>
                   {!locked && (
                     <div className="sel-actions">
+                      <button className="icon" title="Swap for a similar question" onClick={() => swap(q, i)} disabled={swapping === q.id}>{swapping === q.id ? "…" : "↻"}</button>
                       <button className="icon" title="Move up" onClick={() => move(i, -1)} disabled={i === 0}>▲</button>
                       <button className="icon" title="Move down" onClick={() => move(i, 1)} disabled={i === selected.length - 1}>▼</button>
                       <button className="icon" title="Remove" onClick={() => remove(q.id)}>✕</button>
@@ -241,7 +297,15 @@ export default function TestBuilder({ testId, onBack }) {
 
         {!locked && (
           <div className="card">
-            <div className="col-head"><h3>Add from the question bank</h3></div>
+            <div className="col-head">
+              <div className="seg seg-sm">
+                <button className={tab === "auto" ? "seg-btn active" : "seg-btn"} onClick={() => setTab("auto")}>⚡ Auto-pick</button>
+                <button className={tab === "hand" ? "seg-btn active" : "seg-btn"} onClick={() => setTab("hand")}>Pick by hand</button>
+              </div>
+            </div>
+            {tab === "auto" ? (
+              <AutoPick defaultExam={scope} testId={test.id} excludeIds={selected.map((q) => q.id)} onPicked={applyPicked} />
+            ) : (<>
             <div className="filters compact">
               <select value={scope} onChange={(e) => setFilters((f) => ({ ...f, scope: e.target.value, node_id: null }))}>
                 {SYLLABUS_EXAMS.map((e) => <option key={e} value={e}>{SYLLABUS_LABEL[e]} syllabus</option>)}
@@ -279,6 +343,7 @@ export default function TestBuilder({ testId, onBack }) {
                 </li>
               ))}
             </ul>
+            </>)}
           </div>
         )}
       </div>
