@@ -2215,3 +2215,37 @@ a.pr.compact:hover { transform: translateY(-3px); box-shadow: 0 16px 30px -18px 
 .builder-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .builder-cols > .card { min-width: 0; }
 @media (max-width: 1000px) { .builder-cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Journey: chapter numbers, topic groups, subtopic levels, section tags ---------- */
+.gm-level-face { display: grid; justify-items: center; gap: 1px; }
+.gm-chno { font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.92; text-shadow: none; white-space: nowrap; }
+.gm-face-main { line-height: 1; }
+.gm-sheet-badge { line-height: 1; text-align: center; }
+.gm-sheet-badge small { display: block; font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
+.gm-num { color: var(--subject); font-weight: 800; }
+.gm-topic.locked .gm-num { color: #94a3b8; }
+.gm-topic-groups { display: grid; gap: 12px; padding: 12px 20px; }
+.gm-tgroup { border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; overflow: hidden; animation: jr-in .35s ease both; animation-delay: calc(var(--i) * 60ms); }
+.gm-tgroup.st-mastered { border-color: #bbf7d0; }
+.gm-tgroup-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px;
+  background: color-mix(in srgb, var(--subject) 7%, #fff); border-bottom: 1px solid #eef2f7; }
+.gm-tgroup-head > div { display: grid; gap: 2px; min-width: 0; }
+.gm-tgroup-head b { font-size: 15px; }
+.gm-tgroup-head small { color: var(--muted); font-size: 12px; }
+.gm-tgroup .gm-topics { padding: 4px 14px 6px; }
+.gm-sections { display: flex; flex-wrap: wrap; gap: 5px; }
+.gm-sec { font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+.gm-topic.locked .gm-sec { color: #94a3b8; }
+@media (max-width: 640px) {
+  .gm-topic-groups { padding: 10px 12px; }
+  .gm-tgroup-head { flex-wrap: wrap; }
+  .gm-chno { font-size: 8px; }
+}
+.gm-sheet-badge { width: 66px; height: 66px; }
+.gm-sheet-badge small { font-size: 7.5px; letter-spacing: 0.04em; }
+.gm-sec { border-radius: 8px; line-height: 1.35; }
+@media (max-width: 640px) {
+  .gm-topic { flex-wrap: wrap; }
+  .gm-topic .gm-topic-body { flex: 1 1 calc(100% - 64px); }
+  .gm-topic > button { margin-left: 56px; }
+}

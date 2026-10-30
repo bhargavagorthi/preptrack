@@ -1,18 +1,18 @@
-// Syllabus Journey as a game map: worlds (clusters) of levels (chapters) along a path.
-// Levels unlock as earlier ones are mastered, but any level can be opened at any time.
+// Syllabus Journey as a game map: clusters of chapters along a path. Inside a chapter the
+// levels are its subtopics. Everything unlocks as earlier work is mastered, but any chapter or
+// subtopic can be opened at any time.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../../api";
 import { useAuth } from "../../auth/AuthContext";
 import ExamSwitch from "../syllabus/ExamSwitch";
-import { useSyllabus } from "../syllabus/useSyllabus";
 import { SYLLABUS_LABEL } from "../constants";
 import { FxButton, CountUp } from "../components/Fx";
 import { SUBJECT_COLORS } from "../components/fxUtils";
 
 const ICONS = { physics: "⚛️", chemistry: "🧪", mathematics: "📐", maths: "📐" };
 const NAMED = { physics: "#2563eb", chemistry: "#1f9d63", mathematics: "#e07a1f", maths: "#e07a1f" };
-const WORLD_ICONS = ["🏝️", "🌋", "🏔️", "🌌", "🏜️", "🌊", "🌲", "🛰️", "🏰", "🔭"];
+const CLUSTER_ICONS = ["🏝️", "🌋", "🏔️", "🌌", "🏜️", "🌊", "🌲", "🛰️", "🏰", "🔭"];
 const colorOf = (s, i) => NAMED[s.name.toLowerCase()] || SUBJECT_COLORS[i % SUBJECT_COLORS.length];
 const ROW = 132;                     // vertical space per level on the map
 const XS = [50, 76, 50, 24];         // zig-zag positions (% of the map width)
@@ -25,7 +25,7 @@ function Stars({ n, size = 16, label = true }) {
   );
 }
 
-// ------------------------------------------------------------------ one world on the map
+// ------------------------------------------------------------------ one cluster on the map
 function World({ w, index, color, currentId, onOpen, numberFrom }) {
   const chapters = w.chapters;
   const pts = chapters.map((_, i) => ({ x: XS[i % XS.length], y: 70 + i * ROW }));
@@ -52,9 +52,9 @@ function World({ w, index, color, currentId, onOpen, numberFrom }) {
   return (
     <section className={`gm-world ${locked ? "locked" : ""} ${soon ? "soon" : ""}`} style={{ "--subject": color, "--i": index }}>
       <header className="gm-world-banner">
-        <span className="gm-world-icon" aria-hidden="true">{WORLD_ICONS[index % WORLD_ICONS.length]}</span>
+        <span className="gm-world-icon" aria-hidden="true">{CLUSTER_ICONS[index % CLUSTER_ICONS.length]}</span>
         <div className="gm-world-title">
-          <small>World {index + 1}</small>
+          <small>Cluster {index + 1}</small>
           <b>{w.name}</b>
         </div>
         <div className="gm-world-score">
@@ -66,7 +66,7 @@ function World({ w, index, color, currentId, onOpen, numberFrom }) {
       </header>
       {soon ? (
         <div className="gm-soon-list">
-          <span>🛠️ {w.chapters.length} level{w.chapters.length === 1 ? "" : "s"} being built:</span>
+          <span>🛠️ {w.chapters.length} chapter{w.chapters.length === 1 ? "" : "s"} being built:</span>
           {w.chapters.map((c) => <span key={c.id} className="gm-soon-chip">{c.name}</span>)}
         </div>
       ) : (
@@ -89,9 +89,17 @@ function World({ w, index, color, currentId, onOpen, numberFrom }) {
             <div key={c.id} className="gm-level-wrap" style={{ left: `${pts[i].x}%`, top: pts[i].y, "--i": i }}>
               {here && <span className="gm-you" aria-hidden="true">YOU</span>}
               <button type="button" className={cls} onClick={() => onOpen(c)}
-                aria-label={`Level ${numberFrom + i}: ${c.name}. ${state === "locked" ? "Locked. " : ""}${c.stars} of 3 stars`}>
+                aria-label={`Chapter ${numberFrom + i}: ${c.name}. ${state === "locked" ? "Locked. " : ""}${c.stars} of 3 stars`}>
                 <span className="gm-level-face">
-                  {state === "locked" ? "🔒" : state === "coming_soon" ? "…" : c.stars === 3 ? "👑" : numberFrom + i}
+                  {(() => {
+                    const icon = state === "locked" ? "🔒" : state === "coming_soon" ? "…" : c.stars === 3 ? "👑" : null;
+                    return (
+                      <>
+                        <small className="gm-chno">{icon ? `Chapter ${numberFrom + i}` : "Chapter"}</small>
+                        <span className="gm-face-main">{icon || numberFrom + i}</span>
+                      </>
+                    );
+                  })()}
                 </span>
                 {state === "early" && <span className="gm-key" title="Opened early">🔑</span>}
               </button>
@@ -108,11 +116,52 @@ function World({ w, index, color, currentId, onOpen, numberFrom }) {
   );
 }
 
-// ------------------------------------------------------------------ the level card (chapter)
-function LevelSheet({ chapter, world, number, color, subtopicsOf, busyId, onClose, onPractise, onUnlock }) {
+// ------------------------------------------------------------------ one level (a subtopic, or a topic with none)
+function LevelRow({ level, number, label, busyId, ask, onAsk, onPractise, onUnlock }) {
+  const st = level.lock.state;
+  const asking = ask === level.id;
+  const busy = busyId === level.id;
+  return (
+    <li className={`gm-topic ${st} st-${level.status}`} style={{ "--i": number }}>
+      <span className="gm-topic-node">{st === "locked" ? "🔒" : st === "coming_soon" ? "…" : level.stars === 3 ? "✓" : number}</span>
+      <div className="gm-topic-body">
+        <b><span className="gm-num">{label} {number}:</span> {level.name}</b>
+        {level.sections.length > 0 && (
+          <div className="gm-sections" aria-label="Sections">
+            {level.sections.map((sec, i) => <span key={sec.id} className="gm-sec">Section {i + 1}: {sec.name}</span>)}
+          </div>
+        )}
+        <div className="gm-topic-meta">
+          {st === "coming_soon" ? <small>Questions coming soon</small> : <Stars n={level.stars} size={12} />}
+          {level.attempted > 0 && <small>{level.recent_accuracy}% recent · {level.attempted} answered</small>}
+          {st === "locked" && !asking && <small className="gm-hint">{level.lock.hint}</small>}
+          {st === "early" && <small className="gm-hint">🔑 opened early</small>}
+        </div>
+        {asking && (
+          <div className="gm-ask">
+            <span>🔒 {level.lock.hint}. Practice it anyway?</span>
+            <button type="button" className="ghost small" onClick={() => onAsk(null)}>Not now</button>
+            <FxButton busy={busy} busyText="Loading…" onClick={async () => { await onUnlock(level, true); onPractise(level); }}>
+              🔓 Practice anyway
+            </FxButton>
+          </div>
+        )}
+      </div>
+      {st !== "coming_soon" && !asking && (
+        <FxButton variant={st === "locked" || level.status === "mastered" ? "soft" : ""} busy={busy}
+          busyText="Loading…" disabled={busyId != null && !busy}
+          onClick={() => (st === "locked" ? onAsk(level.id) : onPractise(level))}>
+          {st === "locked" ? "🔒 Practice" : level.status === "mastered" ? "↻ Practice again" : level.attempted ? "▶ Continue" : "▶ Practice"}
+        </FxButton>
+      )}
+    </li>
+  );
+}
+
+// ------------------------------------------------------------------ the chapter card
+function LevelSheet({ chapter, cluster, clusterNumber, number, color, busyId, onClose, onPractise, onUnlock }) {
   const [unlocking, setUnlocking] = useState(false);
-  const [askTopic, setAskTopic] = useState(null);
-  const [openTopic, setOpenTopic] = useState(null);
+  const [ask, setAsk] = useState(null);
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -121,8 +170,7 @@ function LevelSheet({ chapter, world, number, color, subtopicsOf, busyId, onClos
 
   const locked = chapter.lock.state === "locked";
   const soon = chapter.lock.state === "coming_soon";
-  const playable = chapter.topics.filter((t) => t.available > 0);
-  const mastered = playable.filter((t) => t.status === "mastered").length;
+  const hasSubtopics = chapter.topics.some((t) => t.has_subtopics);
 
   async function jumpIn() {
     setUnlocking(true);
@@ -130,19 +178,15 @@ function LevelSheet({ chapter, world, number, color, subtopicsOf, busyId, onClos
     await onUnlock(chapter);
     setUnlocking(false);
   }
-  async function playTopic(t) {
-    if (t.lock.state === "locked") { setAskTopic(t.id); return; }
-    onPractise(t);
-  }
 
   return (
     <div className="fx-overlay gm-overlay" onClick={onClose}>
       <div className="gm-sheet" role="dialog" aria-modal="true" aria-label={chapter.name} style={{ "--subject": color }}
         onClick={(e) => e.stopPropagation()}>
         <header className="gm-sheet-head">
-          <div className="gm-sheet-badge">{chapter.stars === 3 ? "👑" : number}</div>
+          <div className="gm-sheet-badge">{chapter.stars === 3 ? "👑" : <><small>Chapter</small>{number}</>}</div>
           <div className="gm-sheet-title">
-            <small>{world.name} · Level {number}</small>
+            <small>Cluster {clusterNumber}: {cluster.name} · Chapter {number}</small>
             <h2>{chapter.name}</h2>
             <Stars n={chapter.stars} size={22} />
           </div>
@@ -157,72 +201,68 @@ function LevelSheet({ chapter, world, number, color, subtopicsOf, busyId, onClos
         ) : locked ? (
           <div className={`gm-lockscreen ${unlocking ? "opening" : ""}`}>
             <span className="gm-padlock" aria-hidden="true">{unlocking ? "🔓" : "🔒"}</span>
-            <p><b>This level is locked.</b> {chapter.lock.hint}.</p>
-            <p className="muted">You can still jump in now. Unlocking is a suggested path, not a rule.</p>
+            <p><b>This chapter is locked.</b> {chapter.lock.hint}.</p>
+            <p className="muted">You can still open it now. Unlocking is a suggested path, not a rule.</p>
             <div className="gm-lock-actions">
               <button type="button" className="ghost" onClick={onClose}>Back to the map</button>
-              <FxButton variant="big" busy={unlocking} busyText="Unlocking…" onClick={jumpIn}>🔓 Jump in anyway</FxButton>
+              <FxButton variant="big" busy={unlocking} busyText="Unlocking…" onClick={jumpIn}>🔓 Open it anyway</FxButton>
             </div>
           </div>
         ) : (
           <>
             {chapter.lock.state === "early" && <p className="gm-early">🔑 Opened early. {chapter.lock.hint}.</p>}
             <div className="gm-sheet-progress">
-              <div className="gm-xp"><span style={{ width: `${playable.length ? (mastered / playable.length) * 100 : 0}%` }} /></div>
-              <small>{mastered} of {playable.length} topics mastered · ★★ clears the level</small>
+              <div className="gm-xp"><span style={{ width: `${chapter.playable_levels ? (chapter.mastered_levels / chapter.playable_levels) * 100 : 0}%` }} /></div>
+              <small>
+                {chapter.mastered_levels} of {chapter.playable_levels} {hasSubtopics ? "subtopics" : "topics"} mastered · ★★ clears the chapter
+              </small>
             </div>
 
-            <ol className="gm-topics">
-              {chapter.topics.map((t, i) => {
-                const st = t.lock.state;
-                const subs = subtopicsOf(t.id);
-                return (
-                  <li key={t.id} className={`gm-topic ${st} st-${t.status}`} style={{ "--i": i }}>
-                    <span className="gm-topic-node">{st === "locked" ? "🔒" : st === "coming_soon" ? "…" : t.stars === 3 ? "✓" : i + 1}</span>
-                    <div className="gm-topic-body">
-                      <b>{t.name}</b>
-                      <div className="gm-topic-meta">
-                        {st === "coming_soon" ? <small>Questions coming soon</small> : <Stars n={t.stars} size={12} />}
-                        {t.attempted > 0 && <small>{t.recent_accuracy}% recent · {t.attempted} answered</small>}
-                        {st === "locked" && askTopic !== t.id && <small className="gm-hint">{t.lock.hint}</small>}
-                        {st === "early" && <small className="gm-hint">🔑 opened early</small>}
-                      </div>
-                      {subs.length > 0 && (
-                        <button type="button" className="gm-inside" onClick={() => setOpenTopic(openTopic === t.id ? null : t.id)}
-                          aria-expanded={openTopic === t.id}>
-                          {openTopic === t.id ? "Hide" : "What's inside"} ({subs.length}) {openTopic === t.id ? "▴" : "▾"}
-                        </button>
-                      )}
-                      {openTopic === t.id && <ul className="gm-subs">{subs.map((s) => <li key={s.id}>{s.name}</li>)}</ul>}
-                      {askTopic === t.id && (
-                        <div className="gm-ask">
-                          <span>🔒 {t.lock.hint}. Play it anyway?</span>
-                          <button type="button" className="ghost small" onClick={() => setAskTopic(null)}>Not now</button>
-                          <FxButton busy={busyId === t.id} busyText="Loading…" onClick={async () => { await onUnlock(t, true); onPractise(t); }}>
-                            🔓 Play anyway
-                          </FxButton>
+            <div className="gm-topic-groups">
+              {chapter.topics.map((t, ti) => (
+                <section key={t.id} className={`gm-tgroup st-${t.status}`} style={{ "--i": ti }}>
+                  {t.has_subtopics ? (
+                    <>
+                      <header className="gm-tgroup-head">
+                        <div>
+                          <b><span className="gm-num">Topic {ti + 1}:</span> {t.name}</b>
+                          <small>
+                            {t.playable_levels ? `${t.mastered_levels}/${t.playable_levels} subtopics mastered` : "Subtopic questions coming soon"}
+                            {t.attempted > 0 && ` · ${t.attempted} answered · ${t.accuracy}%`}
+                          </small>
                         </div>
-                      )}
-                    </div>
-                    {st !== "coming_soon" && askTopic !== t.id && (
-                      <FxButton variant={st === "locked" ? "soft" : t.status === "mastered" ? "soft" : ""} busy={busyId === t.id}
-                        busyText="Loading…" disabled={busyId != null && busyId !== t.id} onClick={() => playTopic(t)}>
-                        {st === "locked" ? "🔒 Play" : t.status === "mastered" ? "↻ Replay" : t.attempted ? "▶ Continue" : "▶ Play"}
-                      </FxButton>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
+                        {t.available > 0 && (
+                          <button type="button" className="ghost small" disabled={busyId != null}
+                            onClick={() => onPractise(t)} title="A mixed set from every subtopic in this topic">
+                            {busyId === t.id ? "Loading…" : "Practice the topic"}
+                          </button>
+                        )}
+                      </header>
+                      <ol className="gm-topics">
+                        {t.levels.map((l, li) => (
+                          <LevelRow key={l.id} level={l} number={li + 1} label="Subtopic" busyId={busyId}
+                            ask={ask} onAsk={setAsk} onPractise={onPractise} onUnlock={onUnlock} />
+                        ))}
+                      </ol>
+                    </>
+                  ) : (
+                    <ol className="gm-topics">
+                      <LevelRow level={t.levels[0]} number={ti + 1} label="Topic" busyId={busyId}
+                        ask={ask} onAsk={setAsk} onPractise={onPractise} onUnlock={onUnlock} />
+                    </ol>
+                  )}
+                </section>
+              ))}
+            </div>
 
             <div className="gm-boss">
               <div>
-                <b>⚔️ Boss battle</b>
-                <small>A mixed set from the whole chapter. Beat it to prove the level.</small>
+                <b>📝 Chapter test</b>
+                <small>A mixed set of questions from the whole chapter.</small>
               </div>
-              <FxButton variant="big" busy={busyId === chapter.id} busyText="Summoning…"
+              <FxButton variant="big" busy={busyId === chapter.id} busyText="Preparing…"
                 disabled={busyId != null && busyId !== chapter.id} onClick={() => onPractise(chapter)}>
-                Fight →
+                Start chapter test →
               </FxButton>
             </div>
           </>
@@ -238,7 +278,6 @@ export default function Journey() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const exam = params.get("exam") || user?.target_exam || "jee_main";
-  const { tree } = useSyllabus(exam);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -269,13 +308,16 @@ export default function Journey() {
     const m = new Map();
     for (const s of subjects) {
       let n = 1;
-      for (const w of s.clusters) for (const c of w.chapters) { m.set(c.id, { s, w, c, number: n++ }); for (const t of c.topics) m.set(t.id, { s, w, c, t }); }
+      s.clusters.forEach((w, wi) => {
+        for (const c of w.chapters) {
+          m.set(c.id, { s, w, wi, c, number: n++ });
+          for (const t of c.topics) for (const l of t.levels) m.set(l.id, { s, w, wi, c, t, l });
+        }
+      });
     }
     return m;
   }, [subjects]);
   const open = index.get(Number(params.get("level")));
-
-  const subtopicsOf = (topicId) => tree?.children.get(topicId) || [];
 
   async function practise(node) {
     setError("");
@@ -314,7 +356,7 @@ export default function Journey() {
         </div>
         <div className="gm-hud-stats">
           <div><strong>★ <CountUp value={subjects.reduce((n, s) => n + s.stars, 0)} /></strong><small>stars</small></div>
-          <div><strong>🏆 <CountUp value={overall.mastered} /></strong><small>topics mastered</small></div>
+          <div><strong>🏆 <CountUp value={overall.mastered} /></strong><small>subtopics mastered</small></div>
         </div>
         <ExamSwitch value={exam} onChange={(e) => setParams({ exam: e })} />
       </div>
@@ -322,7 +364,7 @@ export default function Journey() {
       {active_practice && (
         <div className="jr-resume">
           <span className="jr-resume-dot" />
-          <span>Run in progress: <b>{active_practice.title}</b></span>
+          <span>Practice in progress: <b>{active_practice.title}</b></span>
           <button className="small" onClick={() => navigate(`/studio/tests/attempt/${active_practice.attempt_id}`)}>Resume →</button>
         </div>
       )}
@@ -353,11 +395,11 @@ export default function Journey() {
           <div className="gm-quest-text">
             <small>Next quest</small>
             <b>{next_up.name}</b>
-            <span>{nextLoc.s.name} › {nextLoc.c.name} · {next_up.reason}</span>
+            <span>{nextLoc.s.name} › {nextLoc.c.name}{nextLoc.t && nextLoc.l?.kind === "subtopic" ? ` › ${nextLoc.t.name}` : ""} · {next_up.reason}</span>
           </div>
           <div className="gm-quest-actions">
-            <button type="button" className="ghost small" onClick={() => go({ subject: nextLoc.s.id, level: nextLoc.c.id })}>Open level</button>
-            <FxButton variant="glow" busy={busyId === next_up.id} busyText="Loading…" disabled={busyId != null} onClick={() => practise(next_up)}>▶ Play</FxButton>
+            <button type="button" className="ghost small" onClick={() => go({ subject: nextLoc.s.id, level: nextLoc.c.id })}>Open chapter</button>
+            <FxButton variant="glow" busy={busyId === next_up.id} busyText="Loading…" disabled={busyId != null} onClick={() => practise(next_up)}>▶ Practice</FxButton>
           </div>
         </div>
       )}
@@ -369,13 +411,14 @@ export default function Journey() {
             <World key={w.id} w={w} index={i} color={color} currentId={subject.current_chapter_id}
               numberFrom={index.get(w.chapters[0]?.id)?.number || 1} onOpen={(c) => go({ level: c.id })} />
           ))}
-          <div className="gm-finish">🏁 <b>{subject.name} complete</b><small>Every level at ★★★</small></div>
+          <div className="gm-finish">🏁 <b>{subject.name} complete</b><small>Every chapter at ★★★</small></div>
         </div>
       )}
 
       {open?.c && (
-        <LevelSheet chapter={open.c} world={open.w} number={open.number} color={colorOf(open.s, subjects.indexOf(open.s))}
-          subtopicsOf={subtopicsOf} busyId={busyId} onClose={() => go({ level: null })} onPractise={practise} onUnlock={unlock} />
+        <LevelSheet chapter={open.c} cluster={open.w} clusterNumber={open.wi + 1} number={open.number}
+          color={colorOf(open.s, subjects.indexOf(open.s))}
+          busyId={busyId} onClose={() => go({ level: null })} onPractise={practise} onUnlock={unlock} />
       )}
       {toast && <div key={toast.text} className={`st-toast ${toast.bad ? "bad" : ""}`}>{toast.text}</div>}
     </div>

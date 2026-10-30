@@ -26,62 +26,93 @@ function statusOf(t) {
   return "practising";
 }
 
-const countStatuses = (topics) =>
-  topics.reduce((acc, t) => ({ ...acc, [t.status]: (acc[t.status] || 0) + 1 }),
+const countStatuses = (levels) =>
+  levels.reduce((acc, t) => ({ ...acc, [t.status]: (acc[t.status] || 0) + 1 }),
     { mastered: 0, practising: 0, needs_work: 0, not_started: 0 });
 
-// GET /api/student/journey?exam=: the chosen syllabus tree with this student's status on every topic
+// A topic's overall status from its levels
+function topicStatus(levels) {
+  const playable = levels.filter((l) => l.available > 0);
+  if (playable.length && playable.every((l) => l.status === "mastered")) return "mastered";
+  if (playable.some((l) => l.status === "needs_work")) return "needs_work";
+  if (levels.some((l) => l.attempted > 0)) return "practising";
+  return "not_started";
+}
+
+// GET /api/student/journey?exam=: the chosen syllabus tree with this student's progress.
+// Shape: subject → clusters → chapters → topics → levels (subtopics, or the topic itself when it
+// has none) → sections (shown as tags).
 router.get("/", async (req, res) => {
   const me = req.user.id;
   const { rows: [u] } = await pool.query("SELECT target_exam FROM users WHERE id = $1", [me]);
   const exam = EXAMS.includes(req.query.exam) ? req.query.exam : u.target_exam;
 
+  // Answers and questions count towards the level they sit in: the subtopic, or the topic when
+  // the question is tagged straight to a topic
   const [nodes, statsQ, availQ, unlocksQ] = await Promise.all([
     loadTree(exam),
-    // A topic's status uses answers to questions tagged to it or anything beneath it
     pool.query(
       `WITH answered AS (
-         SELECT np.topic_id, aa.is_correct, a.submitted_at,
-                ROW_NUMBER() OVER (PARTITION BY np.topic_id ORDER BY a.submitted_at DESC, aa.question_id) AS rn
+         SELECT COALESCE(np.subtopic_id, np.topic_id) AS level_id, aa.is_correct, a.submitted_at,
+                ROW_NUMBER() OVER (PARTITION BY COALESCE(np.subtopic_id, np.topic_id)
+                                   ORDER BY a.submitted_at DESC, aa.question_id) AS rn
          FROM attempt_answers aa
          JOIN attempts a ON a.id = aa.attempt_id AND a.status = 'submitted' AND a.student_id = $1
          JOIN question_nodes qn ON qn.question_id = aa.question_id AND qn.exam = $2
          JOIN node_paths np ON np.id = qn.node_id
          WHERE aa.is_correct IS NOT NULL AND np.topic_id IS NOT NULL
        )
-       SELECT topic_id,
+       SELECT level_id,
               COUNT(*)::int AS attempted,
               COUNT(*) FILTER (WHERE is_correct)::int AS correct,
               COUNT(*) FILTER (WHERE rn <= $3)::int AS recent_attempted,
               COUNT(*) FILTER (WHERE rn <= $3 AND is_correct)::int AS recent_correct,
               MAX(submitted_at) AS last_practised
-       FROM answered GROUP BY topic_id`,
+       FROM answered GROUP BY level_id`,
       [me, exam, RULES.recentWindow]
     ),
     pool.query(
-      `SELECT np.chapter_id, np.topic_id, COUNT(*)::int AS n
+      `SELECT np.chapter_id, np.topic_id, np.subtopic_id, COUNT(*)::int AS n
        FROM questions q
        JOIN question_nodes qn ON qn.question_id = q.id AND qn.exam = $1
        JOIN node_paths np ON np.id = qn.node_id
        WHERE ${NOT_IN_LIVE_CONTEST}
-       GROUP BY np.chapter_id, np.topic_id`,
+       GROUP BY np.chapter_id, np.topic_id, np.subtopic_id`,
       [exam]
     ),
     pool.query("SELECT node_id FROM journey_unlocks WHERE user_id = $1", [me]),
   ]);
 
-  const stats = new Map(statsQ.rows.map((r) => [r.topic_id, r]));
-  const topicAvail = new Map();
+  const stats = new Map(statsQ.rows.map((r) => [r.level_id, r]));
+  const levelAvail = new Map();   // subtopic id, or topic id for questions tagged to the topic itself
+  const topicAvail = new Map();   // everything under the topic
   const chapterAvail = new Map();
+  const bump = (m, k, n) => k && m.set(k, (m.get(k) || 0) + n);
   for (const r of availQ.rows) {
-    if (r.topic_id) topicAvail.set(r.topic_id, (topicAvail.get(r.topic_id) || 0) + r.n);
-    if (r.chapter_id) chapterAvail.set(r.chapter_id, (chapterAvail.get(r.chapter_id) || 0) + r.n);
+    bump(levelAvail, r.subtopic_id || r.topic_id, r.n);
+    bump(topicAvail, r.topic_id, r.n);
+    bump(chapterAvail, r.chapter_id, r.n);
   }
 
-  // Build subject → cluster → chapter → topic (subtopics and sections roll up into their topic)
+  const makeLevel = (n, kind) => {
+    const r = stats.get(n.id) || {};
+    const l = {
+      id: n.id, name: n.name, kind, chapter: n.chapter, topic: n.topic, subject: n.subject,
+      available: levelAvail.get(n.id) || 0,
+      attempted: r.attempted || 0,
+      correct: r.correct || 0,
+      accuracy: pct(r.correct || 0, r.attempted || 0),
+      recent_accuracy: pct(r.recent_correct || 0, r.recent_attempted || 0),
+      last_practised: r.last_practised || null,
+      sections: [],
+    };
+    l.status = statusOf(l);
+    return l;
+  };
+
   const subjects = [];
   const byId = new Map();
-  const allTopics = [];
+  const topics = [];
   for (const n of nodes) {
     if (n.level === "subject") {
       const s = { id: n.id, name: n.name, clusters: [] };
@@ -96,64 +127,73 @@ router.get("/", async (req, res) => {
       byId.set(n.id, c);
       byId.get(n.parent_id)?.chapters.push(c);
     } else if (n.level === "topic") {
-      const r = stats.get(n.id) || {};
-      const t = {
-        id: n.id,
-        name: n.name,
-        chapter: n.chapter,
-        subject: n.subject,
-        available: topicAvail.get(n.id) || 0,
-        attempted: r.attempted || 0,
-        correct: r.correct || 0,
-        accuracy: pct(r.correct || 0, r.attempted || 0),
-        recent_accuracy: pct(r.recent_correct || 0, r.recent_attempted || 0),
-        last_practised: r.last_practised || null,
-      };
-      t.status = statusOf(t);
+      const t = { id: n.id, name: n.name, chapter: n.chapter, subject: n.subject, available: topicAvail.get(n.id) || 0,
+        own: makeLevel(n, "topic"), levels: [] };
+      byId.set(n.id, t);
       byId.get(n.parent_id)?.topics.push(t);
-      allTopics.push(t);
+      topics.push(t);
+    } else if (n.level === "subtopic") {
+      const l = makeLevel(n, "subtopic");
+      byId.set(n.id, l);
+      byId.get(n.parent_id)?.levels.push(l);
+    } else if (n.level === "section") {
+      byId.get(n.parent_id)?.sections?.push({ id: n.id, name: n.name });
     }
   }
+  // A topic with no subtopics is a level on its own
+  for (const t of topics) {
+    if (!t.levels.length) t.levels = [t.own];
+    t.has_subtopics = t.levels[0] !== t.own;
+    // Questions tagged straight to a topic that has subtopics: practised with "Practise the topic"
+    t.direct_questions = t.has_subtopics ? t.own.available : 0;
+    // The topic's totals include answers to questions tagged straight to it
+    const counted = t.has_subtopics ? [...t.levels, t.own] : t.levels;
+    const totals = counted.reduce((a, l) => ({ attempted: a.attempted + l.attempted, correct: a.correct + l.correct }), { attempted: 0, correct: 0 });
+    Object.assign(t, totals, { accuracy: pct(totals.correct, totals.attempted), status: topicStatus(t.levels) });
+    delete t.own;
+  }
 
-  // Progress for each chapter, cluster and subject
+  // Progress for each chapter, cluster and subject, counted in levels
+  const levelsOf = (c) => c.topics.flatMap((t) => t.levels);
+  const summarise = (x, levels) => {
+    x.counts = countStatuses(levels);
+    x.total = levels.length;
+    x.progress_pct = pct(x.counts.mastered, x.total) ?? 0;
+  };
+  const allLevels = [];
   for (const s of subjects) {
     for (const cl of s.clusters) {
       for (const c of cl.chapters) {
-        c.counts = countStatuses(c.topics);
-        c.total = c.topics.length;
-        c.progress_pct = pct(c.counts.mastered, c.total) ?? 0;
+        const levels = levelsOf(c);
+        summarise(c, levels);
         c.status = c.total && c.counts.mastered === c.total ? "mastered"
-          : c.topics.some((t) => t.attempted) ? "in_progress" : "not_started";
+          : levels.some((l) => l.attempted) ? "in_progress" : "not_started";
+        allLevels.push(...levels);
       }
-      const topics = cl.chapters.flatMap((c) => c.topics);
-      cl.counts = countStatuses(topics);
-      cl.total = topics.length;
-      cl.progress_pct = pct(cl.counts.mastered, cl.total) ?? 0;
+      summarise(cl, cl.chapters.flatMap(levelsOf));
     }
-    const topics = s.clusters.flatMap((cl) => cl.chapters.flatMap((c) => c.topics));
-    s.counts = countStatuses(topics);
-    s.total = topics.length;
-    s.progress_pct = pct(s.counts.mastered, s.total) ?? 0;
+    summarise(s, s.clusters.flatMap((cl) => cl.chapters.flatMap(levelsOf)));
   }
 
   // Stars, locks and "you are here"
   applyProgression(subjects, new Set(unlocksQ.rows.map((r) => r.node_id)));
 
   // What should the student practise next?
-  const practicable = allTopics.filter((t) => t.available > 0);
+  const practicable = allLevels.filter((l) => l.available > 0);
   const byRecent = (a, b) => a.recent_accuracy - b.recent_accuracy;
   let next_up = null;
-  const weak = practicable.filter((t) => t.status === "needs_work").sort(byRecent)[0];
-  const going = practicable.filter((t) => t.status === "practising").sort(byRecent)[0];
-  const fresh = practicable.find((t) => t.status === "not_started");
+  const weak = practicable.filter((l) => l.status === "needs_work").sort(byRecent)[0];
+  const going = practicable.filter((l) => l.status === "practising").sort(byRecent)[0];
+  const fresh = practicable.find((l) => l.status === "not_started");
+  const what = (l) => (l.kind === "subtopic" ? "subtopic" : "topic");
   if (weak) next_up = { ...weak, reason: `Only ${weak.recent_accuracy}% on your recent answers. Practise to turn it around.` };
   else if (going) next_up = { ...going, reason: `${going.recent_accuracy}% recently. Keep going to master it.` };
-  else if (fresh) next_up = { ...fresh, reason: "You haven't started this topic yet." };
+  else if (fresh) next_up = { ...fresh, reason: `You haven't started this ${what(fresh)} yet.` };
 
-  const overallCounts = countStatuses(allTopics);
+  const overallCounts = countStatuses(allLevels);
   res.json({
     exam,
-    overall: { total: allTopics.length, ...overallCounts, progress_pct: pct(overallCounts.mastered, allTopics.length) ?? 0 },
+    overall: { total: allLevels.length, ...overallCounts, progress_pct: pct(overallCounts.mastered, allLevels.length) ?? 0 },
     subjects,
     next_up,
     active_practice: await activePractice(me),
@@ -161,16 +201,16 @@ router.get("/", async (req, res) => {
   });
 });
 
-// POST /api/student/journey/unlock  { node_id }: open a world, chapter or topic early ("jump in anyway")
+// POST /api/student/journey/unlock  { node_id }: open a cluster, chapter, topic or subtopic early ("jump in anyway")
 router.post("/unlock", async (req, res) => {
   const nodeId = Number(req.body?.node_id);
   if (!Number.isInteger(nodeId)) return res.status(400).json({ error: "Pick a level to unlock" });
   const { rows: [n] } = await pool.query("SELECT id, level FROM syllabus_nodes WHERE id = $1", [nodeId]);
-  if (!n || !["cluster", "chapter", "topic"].includes(n.level)) return res.status(404).json({ error: "Level not found" });
+  if (!n || !["cluster", "chapter", "topic", "subtopic"].includes(n.level)) return res.status(404).json({ error: "Level not found" });
   // Opening a chapter or topic also opens what contains it
   const { rows: [p] } = await pool.query("SELECT ids FROM node_paths WHERE id = $1", [nodeId]);
   const { rows: chain } = await pool.query(
-    "SELECT id FROM syllabus_nodes WHERE id = ANY($1) AND level IN ('cluster', 'chapter', 'topic')",
+    "SELECT id FROM syllabus_nodes WHERE id = ANY($1) AND level IN ('cluster', 'chapter', 'topic', 'subtopic')",
     [p.ids]
   );
   await pool.query(
